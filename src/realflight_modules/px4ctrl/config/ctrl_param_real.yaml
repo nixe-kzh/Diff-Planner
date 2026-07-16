@@ -22,6 +22,10 @@ auto_takeoff_land:
     no_RC: false
     takeoff_height: 0.8 # m
     takeoff_land_speed: 0.2 # m/s
+    rc_trigger:
+        enabled: true
+        channel: 10       # MAVROS RC channel number (one-based)
+        threshold: 1750   # Rising above this PWM value triggers once
 
 thrust_model: # The model that maps thrust signal u(0~1) to real thrust force F(Unit:N): F=K1*Voltage^K2*(K3*u^2+(1-K3)*u). 
     print_value: false # display the value of “thr_scale_compensate” or “hover_percentage” during thrust model estimating.

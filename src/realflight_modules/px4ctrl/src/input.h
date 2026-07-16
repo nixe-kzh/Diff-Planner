@@ -37,6 +37,13 @@ public:
   bool enter_hover_mode;
   bool toggle_reboot;
 
+  bool takeoff_land_triggered;
+  bool takeoff_land_trigger_enabled;
+  int takeoff_land_trigger_channel;
+  int takeoff_land_trigger_threshold;
+  bool have_init_takeoff_land_switch;
+  bool last_takeoff_land_switch_high;
+
   static constexpr double GEAR_SHIFT_VALUE = 0.75;
   static constexpr double API_MODE_THRESHOLD_VALUE = 0.75;
   static constexpr double REBOOT_THRESHOLD_VALUE = 0.5;
@@ -45,6 +52,7 @@ public:
   RC_Data_t();
   void check_validity();
   bool check_centered();
+  void configure_takeoff_land_trigger(bool enabled, int channel, int threshold);
   void feed(mavros_msgs::RCInConstPtr pMsg);
   bool is_received(const ros::Time &now_time);
 };

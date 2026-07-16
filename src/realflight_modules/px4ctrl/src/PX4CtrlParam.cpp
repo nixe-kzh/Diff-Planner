@@ -45,9 +45,12 @@ void Parameter_t::config_from_ros_handle(const ros::NodeHandle &nh)
 
 	read_essential_param(nh, "auto_takeoff_land/enable", takeoff_land.enable);
     read_essential_param(nh, "auto_takeoff_land/enable_auto_arm", takeoff_land.enable_auto_arm);
-    read_essential_param(nh, "auto_takeoff_land/no_RC", takeoff_land.no_RC);
+	read_essential_param(nh, "auto_takeoff_land/no_RC", takeoff_land.no_RC);
 	read_essential_param(nh, "auto_takeoff_land/takeoff_height", takeoff_land.height);
 	read_essential_param(nh, "auto_takeoff_land/takeoff_land_speed", takeoff_land.speed);
+	nh.param("auto_takeoff_land/rc_trigger/enabled", takeoff_land.enable_rc_trigger, false);
+	nh.param("auto_takeoff_land/rc_trigger/channel", takeoff_land.rc_trigger_channel, 10);
+	nh.param("auto_takeoff_land/rc_trigger/threshold", takeoff_land.rc_trigger_threshold, 1750);
 
 	read_essential_param(nh, "thrust_model/print_value", thr_map.print_val);
 	read_essential_param(nh, "thrust_model/K1", thr_map.K1);
@@ -69,6 +72,21 @@ void Parameter_t::config_from_ros_handle(const ros::NodeHandle &nh)
 	{
 		takeoff_land.no_RC = false;
 		ROS_ERROR("\"no_RC\" is only allowd with both \"auto_takeoff_land\" and \"enable_auto_arm\" enabled.");
+	}
+	if (takeoff_land.enable_rc_trigger && takeoff_land.no_RC)
+	{
+		takeoff_land.enable_rc_trigger = false;
+		ROS_WARN("Disable RC takeoff/land trigger because auto_takeoff_land/no_RC is true.");
+	}
+	if (takeoff_land.rc_trigger_channel < 1 || takeoff_land.rc_trigger_channel > 18)
+	{
+		takeoff_land.enable_rc_trigger = false;
+		ROS_ERROR("RC takeoff/land channel must be in [1, 18]. RC trigger disabled.");
+	}
+	if (takeoff_land.rc_trigger_threshold < 800 || takeoff_land.rc_trigger_threshold > 2200)
+	{
+		takeoff_land.enable_rc_trigger = false;
+		ROS_ERROR("RC takeoff/land threshold must be in [800, 2200]. RC trigger disabled.");
 	}
 
 	if ( thr_map.print_val )

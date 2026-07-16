@@ -8,6 +8,9 @@ PX4CtrlFSM::PX4CtrlFSM(Parameter_t &param_, Controller &controller_) : param(par
 {
 	state = MANUAL_CTRL;
 	hover_pose.setZero();
+	rc_data.configure_takeoff_land_trigger(param.takeoff_land.enable_rc_trigger,
+		param.takeoff_land.rc_trigger_channel,
+		param.takeoff_land.rc_trigger_threshold);
 }
 
 /* 
@@ -41,6 +44,8 @@ void PX4CtrlFSM::process()
 	Controller_Output_t u;
 	Desired_State_t des(odom_data);
 	bool rotor_low_speed_during_land = false;
+
+	process_rc_takeoff_land_trigger();
 	
 	// STEP1: state machine runs
 	switch (state)
@@ -347,6 +352,51 @@ void PX4CtrlFSM::process()
 	rc_data.enter_command_mode = false;
 	rc_data.toggle_reboot = false;
 	takeoff_land_data.triggered = false;
+}
+
+void PX4CtrlFSM::process_rc_takeoff_land_trigger()
+{
+	if (!rc_data.takeoff_land_triggered)
+		return;
+
+	// Consume every switch edge exactly once, including rejected commands.
+	rc_data.takeoff_land_triggered = false;
+
+	if (!param.takeoff_land.enable)
+	{
+		ROS_WARN("[px4ctrl] Reject RC takeoff/land trigger because auto takeoff/land is disabled.");
+		return;
+	}
+
+	quadrotor_msgs::TakeoffLand msg;
+	if (state == MANUAL_CTRL && get_landed())
+	{
+		if (!rc_data.is_hover_mode || !rc_data.is_command_mode || !rc_data.check_centered())
+		{
+			ROS_WARN("[px4ctrl] Reject RC takeoff: select hover and command modes, then center all sticks.");
+			return;
+		}
+		msg.takeoff_land_cmd = quadrotor_msgs::TakeoffLand::TAKEOFF;
+		// An explicit takeoff trigger wins if the hover-mode switch rose in the same RC frame.
+		rc_data.enter_hover_mode = false;
+		ROS_INFO("[px4ctrl] RC takeoff command accepted.");
+	}
+	else if (state == AUTO_HOVER && !get_landed())
+	{
+		msg.takeoff_land_cmd = quadrotor_msgs::TakeoffLand::LAND;
+		ROS_INFO("[px4ctrl] RC land command accepted.");
+	}
+	else
+	{
+		ROS_WARN("[px4ctrl] Reject RC takeoff/land trigger: state=%d, landed=%d. "
+			"Takeoff requires MANUAL_CTRL while landed; landing requires AUTO_HOVER while airborne.",
+			static_cast<int>(state), static_cast<int>(get_landed()));
+		return;
+	}
+
+	// Reuse the same topic path as takeoff.sh/land.sh. The existing subscriber
+	// feeds this command into the FSM exactly once on the next spin.
+	takeoff_land_cmd_pub.publish(msg);
 }
 
 void PX4CtrlFSM::motors_idling(const Imu_Data_t &imu, Controller_Output_t &u)
