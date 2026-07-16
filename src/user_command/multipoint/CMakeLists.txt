@@ -8,6 +8,8 @@ find_package(catkin REQUIRED COMPONENTS
   quadrotor_msgs
 )
 
+find_package(Eigen3 REQUIRED)
+
 catkin_package(
   CATKIN_DEPENDS roscpp message_runtime
   DEPENDS EIGEN3
@@ -27,4 +29,3 @@ target_link_libraries(multipointplan
   yaml-cpp
   ${catkin_LIBRARIES}
 )
-
