@@ -24,7 +24,7 @@
     <arg name="target4_y" default="0.0"/>
     <arg name="target4_z" default="0.0"/>
 
-    <include file="$(find diff_planner)/launch/include/advanced_param_sim.xml">
+    <include file="$(find diff_planner)/launch/gazebo_sim/advanced_param_sim.xml">
         <arg name="drone_id" value="0"/>
         <arg name="planner_node_name" value="diff_planner_node"/>
         <arg name="map_size_x_" value="$(arg map_size_x)"/>
