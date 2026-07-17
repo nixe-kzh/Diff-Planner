@@ -55,8 +55,16 @@ int main(int argc, char *argv[])
                                        ros::TransportHints().tcpNoDelay());
 
     ros::Subscriber rc_sub;
-    if (!param.takeoff_land.no_RC) // mavros will still publish wrong rc messages although no RC is connected
+    if (param.takeoff_land.no_RC)
     {
+        ROS_INFO("[PX4CTRL] Simulation RC input: /mavros/rc/in_sim");
+        rc_sub = nh.subscribe<mavros_msgs::RCIn>("/mavros/rc/in_sim",
+                                                 10,
+                                                 boost::bind(&RC_Data_t::feed, &fsm.rc_data, _1));
+    }
+    else
+    {
+        ROS_INFO("[PX4CTRL] Realflight RC input: /mavros/rc/in");
         rc_sub = nh.subscribe<mavros_msgs::RCIn>("/mavros/rc/in",
                                                  10,
                                                  boost::bind(&RC_Data_t::feed, &fsm.rc_data, _1));
@@ -90,23 +98,16 @@ int main(int argc, char *argv[])
 
     ros::Duration(0.5).sleep();
 
-    if (param.takeoff_land.no_RC)
+    ROS_INFO("[PX4CTRL] Waiting for RC");
+    while (ros::ok())
     {
-        ROS_WARN("PX4CTRL] Remote controller disabled, be careful!");
-    }
-    else
-    {
-        ROS_INFO("PX4CTRL] Waiting for RC");
-        while (ros::ok())
+        ros::spinOnce();
+        if (fsm.rc_is_received(ros::Time::now()))
         {
-            ros::spinOnce();
-            if (fsm.rc_is_received(ros::Time::now()))
-            {
-                ROS_INFO("[PX4CTRL] RC received.");
-                break;
-            }
-            ros::Duration(0.1).sleep();
+            ROS_INFO("[PX4CTRL] RC received.");
+            break;
         }
+        ros::Duration(0.1).sleep();
     }
 
     int trials = 0;

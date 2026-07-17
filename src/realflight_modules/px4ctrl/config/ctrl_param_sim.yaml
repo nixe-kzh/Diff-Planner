@@ -19,11 +19,11 @@ rc_reverse: # *
 auto_takeoff_land:
     enable: true
     enable_auto_arm: true
-    no_RC: true
+    no_RC: true # false: /mavros/rc/in (realflight), true: /mavros/rc/in_sim
     takeoff_height: 0.8 # m
     takeoff_land_speed: 0.2 # m/s
     rc_trigger:
-        enabled: false
+        enabled: true
         channel: 10       # MAVROS RC channel number (one-based)
         threshold: 1750   # Rising above this PWM value triggers once
 

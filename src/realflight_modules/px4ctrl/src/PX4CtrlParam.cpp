@@ -68,16 +68,6 @@ void Parameter_t::config_from_ros_handle(const ros::NodeHandle &nh)
 		takeoff_land.enable_auto_arm = false;
 		ROS_ERROR("\"enable_auto_arm\" is only allowd with \"auto_takeoff_land\" enabled.");
 	}
-	if ( takeoff_land.no_RC && (!takeoff_land.enable_auto_arm || !takeoff_land.enable) )
-	{
-		takeoff_land.no_RC = false;
-		ROS_ERROR("\"no_RC\" is only allowd with both \"auto_takeoff_land\" and \"enable_auto_arm\" enabled.");
-	}
-	if (takeoff_land.enable_rc_trigger && takeoff_land.no_RC)
-	{
-		takeoff_land.enable_rc_trigger = false;
-		ROS_WARN("Disable RC takeoff/land trigger because auto_takeoff_land/no_RC is true.");
-	}
 	if (takeoff_land.rc_trigger_channel < 1 || takeoff_land.rc_trigger_channel > 18)
 	{
 		takeoff_land.enable_rc_trigger = false;
