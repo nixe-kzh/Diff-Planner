@@ -105,26 +105,47 @@ Eigen::Vector3d Controller::computeLimitedTotalAccFromThrustForce(
     const double &mass) const
 {
   Eigen::Vector3d total_acc = thrustforce / mass;
+  double total_acc_norm = total_acc.norm();
 
   // Limit magnitude
-  if (total_acc.norm() < kMinNormalizedCollectiveAcc_)
+  if (total_acc_norm < kAlmostZeroValueThreshold_)
   {
-    total_acc = total_acc.normalized() * kMinNormalizedCollectiveAcc_;
+    // The thrust direction is undefined for a zero vector. Use the upright
+    // direction instead of normalizing the zero vector and generating NaNs.
+    total_acc = kMinNormalizedCollectiveAcc_ * Eigen::Vector3d::UnitZ();
+    total_acc_norm = kMinNormalizedCollectiveAcc_;
+  }
+  else if (total_acc_norm < kMinNormalizedCollectiveAcc_)
+  {
+    total_acc *= kMinNormalizedCollectiveAcc_ / total_acc_norm;
+    total_acc_norm = kMinNormalizedCollectiveAcc_;
   }
 
   // Limit angle
   if (param.max_angle > 0)
   {
     double z_acc = total_acc.dot(Eigen::Vector3d::UnitZ());
-    Eigen::Vector3d z_B = total_acc.normalized();
+    const Eigen::Vector3d z_B = total_acc / total_acc_norm;
     if (z_acc < kMinNormalizedCollectiveAcc_)
     {
       z_acc = kMinNormalizedCollectiveAcc_; // Not allow too small z-force when angle limit is enabled.
     }
-    Eigen::Vector3d rot_axis = Eigen::Vector3d::UnitZ().cross(z_B).normalized();
-    double rot_ang = std::acos(Eigen::Vector3d::UnitZ().dot(z_B) / (1 * 1));
+    const double cos_rot_ang = std::max(-1.0, std::min(1.0, Eigen::Vector3d::UnitZ().dot(z_B)));
+    const double rot_ang = std::acos(cos_rot_ang);
     if (rot_ang > param.max_angle) // Exceed the angle limit
     {
+      Eigen::Vector3d rot_axis = Eigen::Vector3d::UnitZ().cross(z_B);
+      const double rot_axis_norm = rot_axis.norm();
+      if (rot_axis_norm < kAlmostZeroValueThreshold_)
+      {
+        // z_B is antiparallel to UnitZ. The limiting rotation axis is not
+        // unique, so choose a deterministic horizontal axis.
+        rot_axis = Eigen::Vector3d::UnitX();
+      }
+      else
+      {
+        rot_axis /= rot_axis_norm;
+      }
       Eigen::Vector3d limited_z_B = Eigen::AngleAxisd(param.max_angle, rot_axis) * Eigen::Vector3d::UnitZ();
       total_acc = z_acc / std::cos(param.max_angle) * limited_z_B;
     }
