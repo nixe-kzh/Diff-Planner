@@ -1,5 +1,5 @@
 <launch>
-    <!-- Keep these defaults aligned with diff_planner/launch/gz_sim. -->
+    <!-- Keep these defaults aligned with diff_planner/launch/gazebo_sim. -->
     <arg name="odom_topic" default="/mavros/local_position/odom"/>
     <arg name="cmd_topic" default="/setpoints_cmd"/>
 
@@ -7,7 +7,7 @@
 	        	<remap from="~odom" to="$(arg odom_topic)" />
 		<remap from="~cmd" to="$(arg cmd_topic)" />
 
-        <rosparam command="load" file="$(find px4ctrl)/config/ctrl_param_fpv.yaml" />
+        <rosparam command="load" file="$(find px4ctrl)/config/ctrl_param_sim.yaml" />
 	</node>
  
 </launch>

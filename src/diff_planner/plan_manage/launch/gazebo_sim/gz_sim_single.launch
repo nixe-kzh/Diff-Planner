@@ -8,9 +8,9 @@
     <arg name="goal_topic" default="/move_base_simple/goal"/>
     <arg name="flight_type" default="1"/>
     <arg name="rviz" default="true"/>
-    <arg name="rviz_config" default="$(find diff_planner)/launch/gz_sim/gz_sim_single.rviz"/>
+    <arg name="rviz_config" default="$(find diff_planner)/launch/gazebo_sim/gz_sim_single.rviz"/>
 
-    <include file="$(find diff_planner)/launch/gz_sim/run_in_gz_single.xml">
+    <include file="$(find diff_planner)/launch/gazebo_sim/run_in_gz_single.xml">
         <arg name="map_size_x" value="$(arg map_size_x)"/>
         <arg name="map_size_y" value="$(arg map_size_y)"/>
         <arg name="map_size_z" value="$(arg map_size_z)"/>

@@ -19,9 +19,14 @@ rc_reverse: # *
 auto_takeoff_land:
     enable: true
     enable_auto_arm: true
-    no_RC: false
+    no_RC: false    # false: /mavros/rc/in (realflight) 
+                    # true: /mavros/rc/in_sim (in sim)
     takeoff_height: 0.8 # m
     takeoff_land_speed: 0.2 # m/s
+    rc_trigger:
+        enabled: true     # 启用遥控器起降功能
+        channel: 10       # 使用 RC 第 10 通道
+        threshold: 1750   # 通道值从低于 1750 变为高于 1750 时触发一次
 
 thrust_model: # The model that maps thrust signal u(0~1) to real thrust force F(Unit:N): F=K1*Voltage^K2*(K3*u^2+(1-K3)*u). 
     print_value: false # display the value of “thr_scale_compensate” or “hover_percentage” during thrust model estimating.

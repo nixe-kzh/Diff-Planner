@@ -12,8 +12,10 @@
   <build_depend>roscpp</build_depend>
   <build_depend>rospy</build_depend>
   <build_depend>message_generation</build_depend>
+  <build_depend>eigen</build_depend>
   <build_export_depend>roscpp</build_export_depend>
   <build_export_depend>rospy</build_export_depend>
+  <build_export_depend>eigen</build_export_depend>
   <build_depend>quadrotor_msgs</build_depend>
   
 

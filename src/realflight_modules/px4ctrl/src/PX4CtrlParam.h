@@ -56,6 +56,9 @@ public:
 		bool no_RC;
 		double height;
 		double speed;
+		bool enable_rc_trigger;
+		int rc_trigger_channel;
+		int rc_trigger_threshold;
 	};
 
 	Gain gain;

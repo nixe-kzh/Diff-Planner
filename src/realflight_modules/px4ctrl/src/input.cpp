@@ -6,6 +6,7 @@ RC_Data_t::RC_Data_t()
 
     last_mode = -1.0;
     last_gear = -1.0;
+    last_reboot_cmd = -1.0;
 
     // Parameter initilation is very important in RC-Free usage!
     is_hover_mode = true;
@@ -13,15 +14,37 @@ RC_Data_t::RC_Data_t()
     is_command_mode = true;
     enter_command_mode = false;
     toggle_reboot = false;
+    takeoff_land_triggered = false;
+    takeoff_land_trigger_enabled = false;
+    takeoff_land_trigger_channel = 9;
+    takeoff_land_trigger_threshold = 1750;
+    have_init_takeoff_land_switch = false;
+    last_takeoff_land_switch_high = false;
     for (int i = 0; i < 4; ++i)
     {
         ch[i] = 0.0;
     }
 }
 
+void RC_Data_t::configure_takeoff_land_trigger(bool enabled, int channel, int threshold)
+{
+    takeoff_land_trigger_enabled = enabled;
+    takeoff_land_trigger_channel = channel - 1; // ROS parameter uses human-readable, one-based channel numbers.
+    takeoff_land_trigger_threshold = threshold;
+    takeoff_land_triggered = false;
+    have_init_takeoff_land_switch = false;
+    last_takeoff_land_switch_high = false;
+}
+
 void RC_Data_t::feed(mavros_msgs::RCInConstPtr pMsg)
 {
     msg = *pMsg;
+    if (msg.channels.size() < 8)
+    {
+        ROS_ERROR_THROTTLE(1.0, "RC message has only %zu channels; px4ctrl requires at least 8.", msg.channels.size());
+        return;
+    }
+
     rcv_stamp = ros::Time::now();
 
     for (int i = 0; i < 4; i++)
@@ -91,7 +114,35 @@ void RC_Data_t::feed(mavros_msgs::RCInConstPtr pMsg)
             toggle_reboot = false;
     }
     else
+    {
         toggle_reboot = false;
+    }
+
+    if (takeoff_land_trigger_enabled)
+    {
+        if (takeoff_land_trigger_channel >= static_cast<int>(msg.channels.size()))
+        {
+            ROS_ERROR_THROTTLE(1.0,
+                "RC takeoff/land channel %d is unavailable; received only %zu channels.",
+                takeoff_land_trigger_channel + 1, msg.channels.size());
+            have_init_takeoff_land_switch = false;
+        }
+        else
+        {
+            const bool switch_high = msg.channels[takeoff_land_trigger_channel] > takeoff_land_trigger_threshold;
+            if (!have_init_takeoff_land_switch)
+            {
+                have_init_takeoff_land_switch = true;
+            }
+            else if (!last_takeoff_land_switch_high && switch_high)
+            {
+                takeoff_land_triggered = true;
+                ROS_INFO("[px4ctrl] RC takeoff/land switch triggered on channel %d.",
+                    takeoff_land_trigger_channel + 1);
+            }
+            last_takeoff_land_switch_high = switch_high;
+        }
+    }
 
     last_mode = mode;
     last_gear = gear;
