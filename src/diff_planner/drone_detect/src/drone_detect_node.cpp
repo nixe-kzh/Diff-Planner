@@ -7,7 +7,7 @@ int main(int argc, char** argv)
   ros::NodeHandle nh("~");
 
   detect::DroneDetector drone_detector(nh);
-  drone_detector.test();
+  drone_detector.Test();
 
   ros::spin();
   return 0;
