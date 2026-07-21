@@ -8,325 +8,329 @@
 
 using namespace Eigen;
 
-ros::Publisher pos_cmd_pub;
+ros::Publisher position_command_publisher;
 
-quadrotor_msgs::PositionCommand cmd;
+quadrotor_msgs::PositionCommand position_command;
 // double pos_gain[3] = {0, 0, 0};
 // double vel_gain[3] = {0, 0, 0};
 
 #define FLIP_YAW_AT_END 0
 #define TURN_YAW_TO_CENTER_AT_END 0
 
-bool receive_traj_ = false;
-boost::shared_ptr<poly_traj::Trajectory> traj_;
-double traj_duration_;
-ros::Time start_time_;
-int traj_id_;
-ros::Time heartbeat_time_(0);
-Eigen::Vector3d last_pos_;
+bool has_received_trajectory = false;
+boost::shared_ptr<poly_traj::Trajectory> trajectory;
+double trajectory_duration;
+ros::Time trajectory_start_time;
+int trajectory_id;
+ros::Time heartbeat_time(0);
+Eigen::Vector3d last_position;
 
 // yaw control
-double last_yaw_, last_yawdot_, slowly_flip_yaw_target_, slowly_turn_to_center_target_;
-double time_forward_;
-double yaw_custom_;
-double YAW_DOT_MAX_PER_SEC = 2 * M_PI;
-double YAW_DOT_DOT_MAX_PER_SEC = 5 * M_PI;
+double last_yaw, last_yaw_rate, flip_yaw_target, center_yaw_target;
+double lookahead_time;
+double custom_yaw;
+double yaw_rate_limit = 2 * M_PI;
+double yaw_acceleration_limit = 5 * M_PI;
 
-bool receive_yaw_ = false;
-ros::Time receive_yaw_time_(0);
+bool has_received_yaw = false;
+ros::Time yaw_receive_time(0);
 
-void heartbeatCallback(std_msgs::EmptyPtr msg)
+void HeartbeatCallback(std_msgs::EmptyPtr message)
 {
-  heartbeat_time_ = ros::Time::now();
+  heartbeat_time = ros::Time::now();
 }
 
-void yawCallback(const quadrotor_msgs::PositionCommandPtr msg)
+void YawCallback(const quadrotor_msgs::PositionCommandPtr message)
 {
-  receive_yaw_ = true;
-  receive_yaw_time_ = ros::Time::now();
-  yaw_custom_ = msg->yaw;
-  // std::cout << "Received yaw:  " << yaw_custom_ << std::endl;
+  has_received_yaw = true;
+  yaw_receive_time = ros::Time::now();
+  custom_yaw = message->yaw;
+  // std::cout << "Received yaw:  " << custom_yaw << std::endl;
 }
 
-void polyTrajCallback(traj_utils::PolyTrajPtr msg)
+void PolynomialTrajectoryCallback(traj_utils::PolyTrajPtr message)
 {
-  if (msg->order != 5)
+  if (message->order != 5)
   {
     ROS_ERROR("[traj_server] Only support trajectory order equals 5 now!");
     return;
   }
-  if (msg->duration.size() * (msg->order + 1) != msg->coef_x.size())
+  if (message->duration.size() * (message->order + 1) != message->coef_x.size())
   {
     ROS_ERROR("[traj_server] WRONG trajectory parameters, ");
     return;
   }
 
-  int piece_nums = msg->duration.size();
-  std::vector<double> dura(piece_nums);
-  std::vector<poly_traj::CoefficientMatrix> cMats(piece_nums);
-  for (int i = 0; i < piece_nums; ++i)
+  int piece_count = message->duration.size();
+  std::vector<double> durations(piece_count);
+  std::vector<poly_traj::CoefficientMatrix> coefficient_matrices(piece_count);
+  for (int i = 0; i < piece_count; ++i)
   {
-    int i6 = i * 6;
-    cMats[i].row(0) << msg->coef_x[i6 + 0], msg->coef_x[i6 + 1], msg->coef_x[i6 + 2],
-        msg->coef_x[i6 + 3], msg->coef_x[i6 + 4], msg->coef_x[i6 + 5];
-    cMats[i].row(1) << msg->coef_y[i6 + 0], msg->coef_y[i6 + 1], msg->coef_y[i6 + 2],
-        msg->coef_y[i6 + 3], msg->coef_y[i6 + 4], msg->coef_y[i6 + 5];
-    cMats[i].row(2) << msg->coef_z[i6 + 0], msg->coef_z[i6 + 1], msg->coef_z[i6 + 2],
-        msg->coef_z[i6 + 3], msg->coef_z[i6 + 4], msg->coef_z[i6 + 5];
+    int coefficient_offset = i * 6;
+    coefficient_matrices[i].row(0) << message->coef_x[coefficient_offset + 0], message->coef_x[coefficient_offset + 1], message->coef_x[coefficient_offset + 2],
+        message->coef_x[coefficient_offset + 3], message->coef_x[coefficient_offset + 4], message->coef_x[coefficient_offset + 5];
+    coefficient_matrices[i].row(1) << message->coef_y[coefficient_offset + 0], message->coef_y[coefficient_offset + 1], message->coef_y[coefficient_offset + 2],
+        message->coef_y[coefficient_offset + 3], message->coef_y[coefficient_offset + 4], message->coef_y[coefficient_offset + 5];
+    coefficient_matrices[i].row(2) << message->coef_z[coefficient_offset + 0], message->coef_z[coefficient_offset + 1], message->coef_z[coefficient_offset + 2],
+        message->coef_z[coefficient_offset + 3], message->coef_z[coefficient_offset + 4], message->coef_z[coefficient_offset + 5];
 
-    dura[i] = msg->duration[i];
+    durations[i] = message->duration[i];
   }
 
-  traj_.reset(new poly_traj::Trajectory(dura, cMats));
+  trajectory.reset(new poly_traj::Trajectory(durations, coefficient_matrices));
 
-  start_time_ = msg->start_time;
-  traj_duration_ = traj_->GetTotalDuration();
-  traj_id_ = msg->traj_id;
+  trajectory_start_time = message->start_time;
+  trajectory_duration = trajectory->GetTotalDuration();
+  trajectory_id = message->traj_id;
 
-  receive_traj_ = true;
+  has_received_trajectory = true;
 }
 
-std::pair<double, double> calculate_yaw(double t_cur, Eigen::Vector3d &pos, double dt)
+std::pair<double, double> CalculateYaw(double current_time,
+                                       Eigen::Vector3d &position,
+                                       double time_step)
 {
-  std::pair<double, double> yaw_yawdot(0, 0);
+  std::pair<double, double> yaw_and_rate(0, 0);
 
-  Eigen::Vector3d dir = t_cur + time_forward_ <= traj_duration_
-                            ? traj_->GetPosition(t_cur + time_forward_) - pos
-                            : traj_->GetPosition(traj_duration_) - pos;
-  double yaw_temp = dir.norm() > 0.1
-                        ? atan2(dir(1), dir(0))
-                        : last_yaw_;
-  if (receive_yaw_ && yaw_custom_ > -100.0)
+  Eigen::Vector3d direction = current_time + lookahead_time <= trajectory_duration
+                            ? trajectory->GetPosition(current_time + lookahead_time) - position
+                            : trajectory->GetPosition(trajectory_duration) - position;
+  double target_yaw = direction.norm() > 0.1
+                        ? atan2(direction(1), direction(0))
+                        : last_yaw;
+  if (has_received_yaw && custom_yaw > -100.0)
   { 
-    if ((ros::Time::now() - receive_yaw_time_).toSec() < 0.5)
+    if ((ros::Time::now() - yaw_receive_time).toSec() < 0.5)
     {
-      yaw_temp = yaw_custom_;
+      target_yaw = custom_yaw;
     }
     else
     {
-      receive_yaw_ = false;
+      has_received_yaw = false;
     }
   }
 
-  double yawdot = 0;
-  double d_yaw = yaw_temp - last_yaw_;
-  if (d_yaw >= M_PI)
+  double yaw_rate = 0;
+  double yaw_difference = target_yaw - last_yaw;
+  if (yaw_difference >= M_PI)
   {
-    d_yaw -= 2 * M_PI;
+    yaw_difference -= 2 * M_PI;
   }
-  if (d_yaw <= -M_PI)
+  if (yaw_difference <= -M_PI)
   {
-    d_yaw += 2 * M_PI;
+    yaw_difference += 2 * M_PI;
   }
 
-  const double YDM = d_yaw >= 0 ? YAW_DOT_MAX_PER_SEC : -YAW_DOT_MAX_PER_SEC;
-  const double YDDM = d_yaw >= 0 ? YAW_DOT_DOT_MAX_PER_SEC : -YAW_DOT_DOT_MAX_PER_SEC;
-  double d_yaw_max;
-  if (fabs(last_yawdot_ + dt * YDDM) <= fabs(YDM))
+  const double maximum_yaw_rate = yaw_difference >= 0 ? yaw_rate_limit : -yaw_rate_limit;
+  const double maximum_yaw_acceleration = yaw_difference >= 0 ? yaw_acceleration_limit : -yaw_acceleration_limit;
+  double maximum_yaw_change;
+  if (fabs(last_yaw_rate + time_step * maximum_yaw_acceleration) <= fabs(maximum_yaw_rate))
   {
-    // yawdot = last_yawdot_ + dt * YDDM;
-    d_yaw_max = last_yawdot_ * dt + 0.5 * YDDM * dt * dt;
+    // yaw_rate = last_yaw_rate + time_step * maximum_yaw_acceleration;
+    maximum_yaw_change = last_yaw_rate * time_step + 0.5 * maximum_yaw_acceleration * time_step * time_step;
   }
   else
   {
-    // yawdot = YDM;
-    double t1 = (YDM - last_yawdot_) / YDDM;
-    d_yaw_max = ((dt - t1) + dt) * (YDM - last_yawdot_) / 2.0;
+    // yaw_rate = maximum_yaw_rate;
+    double acceleration_time = (maximum_yaw_rate - last_yaw_rate) / maximum_yaw_acceleration;
+    maximum_yaw_change = ((time_step - acceleration_time) + time_step) * (maximum_yaw_rate - last_yaw_rate) / 2.0;
   }
 
-  if (fabs(d_yaw) > fabs(d_yaw_max))
+  if (fabs(yaw_difference) > fabs(maximum_yaw_change))
   {
-    d_yaw = d_yaw_max;
+    yaw_difference = maximum_yaw_change;
   }
-  yawdot = d_yaw / dt;
+  yaw_rate = yaw_difference / time_step;
 
-  double yaw = last_yaw_ + d_yaw;
+  double yaw = last_yaw + yaw_difference;
   if (yaw > M_PI)
     yaw -= 2 * M_PI;
   if (yaw < -M_PI)
     yaw += 2 * M_PI;
-  yaw_yawdot.first = yaw;
-  yaw_yawdot.second = yawdot;
+  yaw_and_rate.first = yaw;
+  yaw_and_rate.second = yaw_rate;
 
-  last_yaw_ = yaw_yawdot.first;
-  last_yawdot_ = yaw_yawdot.second;
+  last_yaw = yaw_and_rate.first;
+  last_yaw_rate = yaw_and_rate.second;
 
-  yaw_yawdot.second = yaw_temp;
+  yaw_and_rate.second = target_yaw;
 
-  return yaw_yawdot;
+  return yaw_and_rate;
 }
 
-void publish_cmd(Vector3d p, Vector3d v, Vector3d a, Vector3d j, double y, double yd)
+void PublishCommand(Vector3d position, Vector3d velocity,
+                    Vector3d acceleration, Vector3d jerk, double yaw,
+                    double yaw_rate)
 {
 
-  cmd.header.stamp = ros::Time::now();
-  cmd.header.frame_id = "world";
-  cmd.trajectory_flag = quadrotor_msgs::PositionCommand::TRAJECTORY_STATUS_READY;
-  cmd.trajectory_id = traj_id_;
+  position_command.header.stamp = ros::Time::now();
+  position_command.header.frame_id = "world";
+  position_command.trajectory_flag = quadrotor_msgs::PositionCommand::TRAJECTORY_STATUS_READY;
+  position_command.trajectory_id = trajectory_id;
 
-  cmd.position.x = p(0);
-  cmd.position.y = p(1);
-  cmd.position.z = p(2);
-  cmd.velocity.x = v(0);
-  cmd.velocity.y = v(1);
-  cmd.velocity.z = v(2);
-  cmd.acceleration.x = a(0);
-  cmd.acceleration.y = a(1);
-  cmd.acceleration.z = a(2);
-  cmd.jerk.x = j(0);
-  cmd.jerk.y = j(1);
-  cmd.jerk.z = j(2);
-  cmd.yaw = y;
-  cmd.yaw_dot = yd;
-  pos_cmd_pub.publish(cmd);
+  position_command.position.x = position(0);
+  position_command.position.y = position(1);
+  position_command.position.z = position(2);
+  position_command.velocity.x = velocity(0);
+  position_command.velocity.y = velocity(1);
+  position_command.velocity.z = velocity(2);
+  position_command.acceleration.x = acceleration(0);
+  position_command.acceleration.y = acceleration(1);
+  position_command.acceleration.z = acceleration(2);
+  position_command.jerk.x = jerk(0);
+  position_command.jerk.y = jerk(1);
+  position_command.jerk.z = jerk(2);
+  position_command.yaw = yaw;
+  position_command.yaw_dot = yaw_rate;
+  position_command_publisher.publish(position_command);
 
-  last_pos_ = p;
+  last_position = position;
 }
 
-void cmdCallback(const ros::TimerEvent &e)
+void CommandTimerCallback(const ros::TimerEvent &event)
 {
-  /* no publishing before receive traj_ and have heartbeat */
-  if (heartbeat_time_.toSec() <= 1e-5)
+  /* no publishing before receive trajectory and have heartbeat */
+  if (heartbeat_time.toSec() <= 1e-5)
   {
     // ROS_ERROR_ONCE("[traj_server] No heartbeat from the planner received");
     return;
   }
-  if (!receive_traj_)
+  if (!has_received_trajectory)
     return;
 
-  ros::Time time_now = ros::Time::now();
+  ros::Time current_ros_time = ros::Time::now();
 
-  if ((time_now - heartbeat_time_).toSec() > 0.5)
+  if ((current_ros_time - heartbeat_time).toSec() > 0.5)
   {
     ROS_ERROR("[traj_server] Lost heartbeat from the planner, is it dead?");
 
-    receive_traj_ = false;
-    publish_cmd(last_pos_, Vector3d::Zero(), Vector3d::Zero(), Vector3d::Zero(), last_yaw_, 0);
+    has_received_trajectory = false;
+    PublishCommand(last_position, Vector3d::Zero(), Vector3d::Zero(), Vector3d::Zero(), last_yaw, 0);
   }
 
-  double t_cur = (time_now - start_time_).toSec();
+  double current_time = (current_ros_time - trajectory_start_time).toSec();
 
-  Eigen::Vector3d pos(Eigen::Vector3d::Zero()), vel(Eigen::Vector3d::Zero()), acc(Eigen::Vector3d::Zero()), jer(Eigen::Vector3d::Zero());
-  std::pair<double, double> yaw_yawdot(0, 0);
+  Eigen::Vector3d position(Eigen::Vector3d::Zero()), velocity(Eigen::Vector3d::Zero()), acceleration(Eigen::Vector3d::Zero()), jerk(Eigen::Vector3d::Zero());
+  std::pair<double, double> yaw_and_rate(0, 0);
 
-  static ros::Time time_last = ros::Time::now();
+  static ros::Time last_update_time = ros::Time::now();
 #if FLIP_YAW_AT_END or TURN_YAW_TO_CENTER_AT_END
   static bool finished = false;
 #endif
-  if (t_cur < traj_duration_ && t_cur >= 0.0)
+  if (current_time < trajectory_duration && current_time >= 0.0)
   {
-    pos = traj_->GetPosition(t_cur);
-    vel = traj_->GetVelocity(t_cur);
-    acc = traj_->GetAcceleration(t_cur);
-    jer = traj_->GetJerk(t_cur);
+    position = trajectory->GetPosition(current_time);
+    velocity = trajectory->GetVelocity(current_time);
+    acceleration = trajectory->GetAcceleration(current_time);
+    jerk = trajectory->GetJerk(current_time);
 
     /*** calculate yaw ***/
-    yaw_yawdot = calculate_yaw(t_cur, pos, 0.01);
+    yaw_and_rate = CalculateYaw(current_time, position, 0.01);
     /*** calculate yaw ***/
 
-    time_last = time_now;
-    last_yaw_ = yaw_yawdot.first;
-    last_pos_ = pos;
+    last_update_time = current_ros_time;
+    last_yaw = yaw_and_rate.first;
+    last_position = position;
 
-    slowly_flip_yaw_target_ = yaw_yawdot.first + M_PI;
-    if (slowly_flip_yaw_target_ > M_PI)
-      slowly_flip_yaw_target_ -= 2 * M_PI;
-    if (slowly_flip_yaw_target_ < -M_PI)
-      slowly_flip_yaw_target_ += 2 * M_PI;
-    constexpr double CENTER[2] = {0.0, 0.0};
-    slowly_turn_to_center_target_ = atan2(CENTER[1] - pos(1), CENTER[0] - pos(0));
+    flip_yaw_target = yaw_and_rate.first + M_PI;
+    if (flip_yaw_target > M_PI)
+      flip_yaw_target -= 2 * M_PI;
+    if (flip_yaw_target < -M_PI)
+      flip_yaw_target += 2 * M_PI;
+    constexpr double kCenter[2] = {0.0, 0.0};
+    center_yaw_target = atan2(kCenter[1] - position(1), kCenter[0] - position(0));
 
     // publish
-    publish_cmd(pos, vel, acc, jer, yaw_yawdot.first, yaw_yawdot.second);
+    PublishCommand(position, velocity, acceleration, jerk, yaw_and_rate.first, yaw_and_rate.second);
 #if FLIP_YAW_AT_END or TURN_YAW_TO_CENTER_AT_END
     finished = false;
 #endif
   }
 
 #if FLIP_YAW_AT_END
-  else if (t_cur >= traj_duration_)
+  else if (current_time >= trajectory_duration)
   {
     if (finished)
       return;
 
-    /* hover when finished traj_ */
-    pos = traj_->GetPosition(traj_duration_);
-    vel.setZero();
-    acc.setZero();
-    jer.setZero();
+    /* hover when finished trajectory */
+    position = trajectory->GetPosition(trajectory_duration);
+    velocity.setZero();
+    acceleration.setZero();
+    jerk.setZero();
 
-    if (slowly_flip_yaw_target_ > 0)
+    if (flip_yaw_target > 0)
     {
-      last_yaw_ += (time_now - time_last).toSec() * M_PI / 2;
-      yaw_yawdot.second = M_PI / 2;
-      if (last_yaw_ >= slowly_flip_yaw_target_)
+      last_yaw += (current_ros_time - last_update_time).toSec() * M_PI / 2;
+      yaw_and_rate.second = M_PI / 2;
+      if (last_yaw >= flip_yaw_target)
       {
         finished = true;
       }
     }
     else
     {
-      last_yaw_ -= (time_now - time_last).toSec() * M_PI / 2;
-      yaw_yawdot.second = -M_PI / 2;
-      if (last_yaw_ <= slowly_flip_yaw_target_)
+      last_yaw -= (current_ros_time - last_update_time).toSec() * M_PI / 2;
+      yaw_and_rate.second = -M_PI / 2;
+      if (last_yaw <= flip_yaw_target)
       {
         finished = true;
       }
     }
 
-    yaw_yawdot.first = last_yaw_;
-    time_last = time_now;
+    yaw_and_rate.first = last_yaw;
+    last_update_time = current_ros_time;
 
-    publish_cmd(pos, vel, acc, jer, yaw_yawdot.first, yaw_yawdot.second);
+    PublishCommand(position, velocity, acceleration, jerk, yaw_and_rate.first, yaw_and_rate.second);
   }
 #endif
 
 #if TURN_YAW_TO_CENTER_AT_END
-  else if (t_cur >= traj_duration_)
+  else if (current_time >= trajectory_duration)
   {
     if (finished)
       return;
 
-    /* hover when finished traj_ */
-    pos = traj_->GetPosition(traj_duration_);
-    vel.setZero();
-    acc.setZero();
-    jer.setZero();
+    /* hover when finished trajectory */
+    position = trajectory->GetPosition(trajectory_duration);
+    velocity.setZero();
+    acceleration.setZero();
+    jerk.setZero();
 
-    double d_yaw = last_yaw_ - slowly_turn_to_center_target_;
-    if (d_yaw >= M_PI)
+    double yaw_difference = last_yaw - center_yaw_target;
+    if (yaw_difference >= M_PI)
     {
-      last_yaw_ += (time_now - time_last).toSec() * M_PI / 2;
-      yaw_yawdot.second = M_PI / 2;
-      if (last_yaw_ > M_PI)
-        last_yaw_ -= 2 * M_PI;
+      last_yaw += (current_ros_time - last_update_time).toSec() * M_PI / 2;
+      yaw_and_rate.second = M_PI / 2;
+      if (last_yaw > M_PI)
+        last_yaw -= 2 * M_PI;
     }
-    else if (d_yaw <= -M_PI)
+    else if (yaw_difference <= -M_PI)
     {
-      last_yaw_ -= (time_now - time_last).toSec() * M_PI / 2;
-      yaw_yawdot.second = -M_PI / 2;
-      if (last_yaw_ < -M_PI)
-        last_yaw_ += 2 * M_PI;
+      last_yaw -= (current_ros_time - last_update_time).toSec() * M_PI / 2;
+      yaw_and_rate.second = -M_PI / 2;
+      if (last_yaw < -M_PI)
+        last_yaw += 2 * M_PI;
     }
-    else if (d_yaw >= 0)
+    else if (yaw_difference >= 0)
     {
-      last_yaw_ -= (time_now - time_last).toSec() * M_PI / 2;
-      yaw_yawdot.second = -M_PI / 2;
-      if (last_yaw_ <= slowly_turn_to_center_target_)
+      last_yaw -= (current_ros_time - last_update_time).toSec() * M_PI / 2;
+      yaw_and_rate.second = -M_PI / 2;
+      if (last_yaw <= center_yaw_target)
         finished = true;
     }
     else
     {
-      last_yaw_ += (time_now - time_last).toSec() * M_PI / 2;
-      yaw_yawdot.second = M_PI / 2;
-      if (last_yaw_ >= slowly_turn_to_center_target_)
+      last_yaw += (current_ros_time - last_update_time).toSec() * M_PI / 2;
+      yaw_and_rate.second = M_PI / 2;
+      if (last_yaw >= center_yaw_target)
         finished = true;
     }
 
-    yaw_yawdot.first = last_yaw_;
-    time_last = time_now;
+    yaw_and_rate.first = last_yaw;
+    last_update_time = current_ros_time;
 
-    publish_cmd(pos, vel, acc, jer, yaw_yawdot.first, yaw_yawdot.second);
+    PublishCommand(position, velocity, acceleration, jerk, yaw_and_rate.first, yaw_and_rate.second);
   }
 #endif
 }
@@ -335,21 +339,21 @@ int main(int argc, char **argv)
 {
   ros::init(argc, argv, "traj_server");
   // ros::NodeHandle node;
-  ros::NodeHandle nh("~");
+  ros::NodeHandle node_handle("~");
 
-  ros::Subscriber poly_traj_sub = nh.subscribe("planning/trajectory", 10, polyTrajCallback);
-  ros::Subscriber yaw_sub = nh.subscribe("/planning/yaw", 10, yawCallback);
-  ros::Subscriber heartbeat_sub = nh.subscribe("heartbeat", 10, heartbeatCallback);
+  ros::Subscriber polynomial_trajectory_subscriber = node_handle.subscribe("planning/trajectory", 10, PolynomialTrajectoryCallback);
+  ros::Subscriber yaw_subscriber = node_handle.subscribe("/planning/yaw", 10, YawCallback);
+  ros::Subscriber heartbeat_subscriber = node_handle.subscribe("heartbeat", 10, HeartbeatCallback);
   
-  pos_cmd_pub = nh.advertise<quadrotor_msgs::PositionCommand>("/position_cmd", 50);
+  position_command_publisher = node_handle.advertise<quadrotor_msgs::PositionCommand>("/position_cmd", 50);
 
-  ros::Timer cmd_timer = nh.createTimer(ros::Duration(0.01), cmdCallback);
+  ros::Timer command_timer = node_handle.createTimer(ros::Duration(0.01), CommandTimerCallback);
 
-  nh.param("traj_server/time_forward", time_forward_, -1.0);
-  nh.param("traj_server/yaw_dot_max", YAW_DOT_MAX_PER_SEC, YAW_DOT_MAX_PER_SEC);
-  nh.param("traj_server/yaw_dot_dot_max", YAW_DOT_DOT_MAX_PER_SEC, YAW_DOT_DOT_MAX_PER_SEC);
-  last_yaw_ = 0.0;
-  last_yawdot_ = 0.0;
+  node_handle.param("traj_server/time_forward", lookahead_time, -1.0);
+  node_handle.param("traj_server/yaw_dot_max", yaw_rate_limit, yaw_rate_limit);
+  node_handle.param("traj_server/yaw_dot_dot_max", yaw_acceleration_limit, yaw_acceleration_limit);
+  last_yaw = 0.0;
+  last_yaw_rate = 0.0;
 
   ros::Duration(1.0).sleep();
 

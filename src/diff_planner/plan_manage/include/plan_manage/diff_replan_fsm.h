@@ -1,5 +1,5 @@
-#ifndef _REBO_REPLAN_FSM_H_
-#define _REBO_REPLAN_FSM_H_
+#ifndef DIFF_PLANNER_PLAN_MANAGE_INCLUDE_PLAN_MANAGE_DIFF_REPLAN_FSM_H_
+#define DIFF_PLANNER_PLAN_MANAGE_INCLUDE_PLAN_MANAGE_DIFF_REPLAN_FSM_H_
 
 #include <Eigen/Eigen>
 #include <algorithm>
@@ -9,6 +9,8 @@
 #include <ros/ros.h>
 #include <std_msgs/Empty.h>
 #include <std_msgs/Float64.h>
+#include <string>
+#include <utility>
 #include <vector>
 #include <visualization_msgs/Marker.h>
 
@@ -33,107 +35,114 @@ namespace diff_planner
     DiffReplanFSM() {}
     ~DiffReplanFSM() {}
 
-    void init(ros::NodeHandle &nh);
+    void Init(ros::NodeHandle &node_handle);
 
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
   private:
     /* ---------- flag ---------- */
-    enum FSM_EXEC_STATE
+    enum FsmExecutionState
     {
-      INIT,
-      WAIT_TARGET,
-      GEN_NEW_TRAJ,
-      REPLAN_TRAJ,
-      EXEC_TRAJ,
-      EMERGENCY_STOP,
-      SEQUENTIAL_START
+      kInit,
+      kWaitTarget,
+      kGenerateNewTrajectory,
+      kReplanTrajectory,
+      kExecuteTrajectory,
+      kEmergencyStop,
+      kSequentialStart
     };
-    enum TARGET_TYPE
+    enum TargetType
     {
-      MANUAL_TARGET = 1,
-      PRESET_TARGET = 2,
-      REFENCE_PATH = 3
+      kManualTarget = 1,
+      kPresetTarget = 2,
+      kReferencePath = 3
     };
     /* Anomaly Detection Parameters */
-    Eigen::Vector3d last_local_target_pos_;
+    Eigen::Vector3d last_local_target_position_;
     double last_target_change_time_;
-    int replan_fail_count_;
-    static constexpr double TARGET_STUCK_THRESH = 0.3;  // Threshold for target movement below which it's considered "stuck"
-    double TARGET_STUCK_TIME;                           // Default time threshold (seconds) for being considered stuck before reinitialization
-    static constexpr int MAX_REPLAN_FAIL_COUNT = 10;    // Threshold for maximum optimization failure count
+    int replan_failure_count_;
+    static constexpr double kTargetStuckThreshold = 0.3;  // Threshold for target movement below which it's considered "stuck"
+    double target_stuck_time_;                           // Default time threshold (seconds) for being considered stuck before reinitialization
+    static constexpr int kMaxReplanFailureCount = 10;    // Threshold for maximum optimization failure count
     /* planning utils */
     DiffPlannerManager::Ptr planner_manager_;
     PlanningVisualization::Ptr visualization_;
-    traj_utils::DataDisp data_disp_;
+    traj_utils::DataDisp display_data_;
 
     /* parameters */
     int target_type_; // 1 mannual select, 2 hard code
-    double no_replan_thresh_, replan_thresh_;
+    double no_replan_threshold_, replan_threshold_;
     double waypoints_[50][3];
-    int waypoint_num_, wpt_id_;
-    double planning_horizen_;
+    int waypoint_count_, waypoint_index_;
+    double planning_horizon_;
     double emergency_time_;
-    bool flag_realworld_experiment_;
+    bool is_real_world_experiment_;
     bool enable_fail_safe_;
     bool enable_ground_height_measurement_;
-    bool flag_escape_emergency_;
+    bool escape_emergency_;
     bool need_hover_stop_;
-    bool mondify_final_goal_;
+    bool modify_final_goal_;
     bool enable_stuck_detect_; // Whether to enable stuck detection
 
-    bool have_trigger_, have_target_, have_odom_, have_new_target_, have_recv_pre_agent_, touch_goal_, mandatory_stop_;
-    FSM_EXEC_STATE exec_state_;
-    int continously_called_times_{0};
+    bool has_trigger_, has_target_, has_odometry_, has_new_target_, has_received_previous_agent_, touch_goal_, mandatory_stop_;
+    FsmExecutionState execution_state_;
+    int consecutive_call_count_{0};
 
-    Eigen::Vector3d start_pt_, start_vel_, start_acc_;   // start state
+    Eigen::Vector3d start_point_, start_velocity_, start_acceleration_;   // start state
     Eigen::Vector3d final_goal_;                             // goal state
-    Eigen::Vector3d local_target_pt_, local_target_vel_; // local target state
-    Eigen::Vector3d odom_pos_, odom_vel_, odom_acc_;     // odometry state
-    std::vector<Eigen::Vector3d> wps_;
+    Eigen::Vector3d local_target_point_, local_target_velocity_; // local target state
+    Eigen::Vector3d odometry_position_, odometry_velocity_, odometry_acceleration_;     // odometry state
+    std::vector<Eigen::Vector3d> waypoint_positions_;
 
     /* ROS utils */
     ros::NodeHandle node_;
-    ros::Timer exec_timer_, safety_timer_;
-    ros::Subscriber waypoint_sub_, odom_sub_, trigger_sub_, broadcast_ploytraj_sub_, mandatory_stop_sub_;
-    ros::Publisher poly_traj_pub_, data_disp_pub_, broadcast_ploytraj_pub_, heartbeat_pub_, ground_height_pub_;
+    ros::Timer execution_timer_, safety_timer_;
+    ros::Subscriber waypoint_subscriber_, odometry_subscriber_, trigger_subscriber_, broadcast_trajectory_subscriber_, mandatory_stop_subscriber_;
+    ros::Publisher polynomial_trajectory_publisher_, display_data_publisher_, broadcast_trajectory_publisher_, heartbeat_publisher_, ground_height_publisher_;
 
     /* state machine functions */
-    void execFSMCallback(const ros::TimerEvent &e);
-    void changeFSMExecState(FSM_EXEC_STATE new_state, string pos_call);
-    void printFSMExecState();
-    std::pair<int, DiffReplanFSM::FSM_EXEC_STATE> timesOfConsecutiveStateCalls();
+    void ExecutionTimerCallback(const ros::TimerEvent &event);
+    void ChangeExecutionState(FsmExecutionState new_state,
+                              std::string caller);
+    void PrintExecutionState();
+    std::pair<int, DiffReplanFSM::FsmExecutionState> GetConsecutiveStateCalls();
 
     /* safety */
-    void checkCollisionCallback(const ros::TimerEvent &e);
-    bool callEmergencyStop(Eigen::Vector3d stop_pos);
+    void SafetyTimerCallback(const ros::TimerEvent &event);
+    bool CallEmergencyStop(Eigen::Vector3d stop_position);
 
     /* local planning */
-    bool callReboundReplan(bool flag_use_poly_init, bool flag_randomPolyTraj);
-    bool planFromGlobalTraj(const int trial_times = 1);
-    bool planFromLocalTraj(const int trial_times = 1);
+    bool CallReboundReplan(bool use_polynomial_initialization,
+                           bool use_random_polynomial_trajectory);
+    bool PlanFromGlobalTrajectory(int trial_count = 1);
+    bool PlanFromLocalTrajectory(int trial_count = 1);
 
     /* global trajectory */
-    void waypointCallback(const geometry_msgs::PoseStampedPtr &msg);
-    void readGivenWpsAndPlan();
-    bool planNextWaypoint(const Eigen::Vector3d next_wp, bool flag_2replan);
-    bool mondifyInCollisionFinalGoal();
-    void finishProcess();
+    void WaypointCallback(const geometry_msgs::PoseStampedPtr &message);
+    void ReadGivenWaypointsAndPlan();
+    bool PlanNextWaypoint(const Eigen::Vector3d next_waypoint,
+                          bool trigger_replan);
+    bool ModifyInCollisionFinalGoal();
+    void FinishProcess();
 
     /* input-output */
-    void mandatoryStopCallback(const std_msgs::Empty &msg);
-    void odometryCallback(const nav_msgs::OdometryConstPtr &msg);
-    void triggerCallback(const geometry_msgs::PoseStampedPtr &msg);
-    void RecvBroadcastMINCOTrajCallback(const traj_utils::MINCOTrajConstPtr &msg);
-    void polyTraj2ROSMsg(traj_utils::PolyTraj &poly_msg, traj_utils::MINCOTraj &MINCO_msg);
+    void MandatoryStopCallback(const std_msgs::Empty &message);
+    void OdometryCallback(const nav_msgs::OdometryConstPtr &message);
+    void TriggerCallback(const geometry_msgs::PoseStampedPtr &message);
+    void ReceiveBroadcastMincoTrajectoryCallback(
+        const traj_utils::MINCOTrajConstPtr &message);
+    void ConvertPolynomialTrajectoryToRosMessage(
+        traj_utils::PolyTraj &polynomial_message,
+        traj_utils::MINCOTraj &minco_message);
 
     /* ground height measurement */
-    bool measureGroundHeight(double &height);
-    Eigen::Vector3d projectPointToLineSegment(const Eigen::Vector3d& a,
-                                              const Eigen::Vector3d& b,
-                                              const Eigen::Vector3d& p);
+    bool MeasureGroundHeight(double &height);
+    Eigen::Vector3d ProjectPointToLineSegment(
+        const Eigen::Vector3d &line_start,
+        const Eigen::Vector3d &line_end,
+        const Eigen::Vector3d &point);
   };
 
-} // namespace diff_planner
+}  // namespace diff_planner
 
-#endif
+#endif  // DIFF_PLANNER_PLAN_MANAGE_INCLUDE_PLAN_MANAGE_DIFF_REPLAN_FSM_H_
