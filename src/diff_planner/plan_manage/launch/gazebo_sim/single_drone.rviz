@@ -210,7 +210,7 @@ Visualization Manager:
     Default Light: true
     Fixed Frame: world
     Frame Rate: 30
-  Name: root
+  Name: Root
   Tools:
     - Class: rviz/Interact
       Hide Inactive Objects: true

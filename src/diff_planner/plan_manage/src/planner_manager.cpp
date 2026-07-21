@@ -21,7 +21,7 @@ namespace diff_planner
     node_handle.param("manager/max_vel", plan_parameters_.max_velocity, -1.0);
     node_handle.param("manager/max_acc", plan_parameters_.max_acceleration, -1.0);
     node_handle.param("manager/feasibility_tolerance", plan_parameters_.feasibility_tolerance, 0.0);
-    node_handle.param("manager/polyTraj_piece_length", plan_parameters_.trajectory_piece_length, -1.0);
+    node_handle.param("manager/trajectory_piece_length", plan_parameters_.trajectory_piece_length, -1.0);
     node_handle.param("manager/planning_horizon", plan_parameters_.planning_horizon, 5.0);
     node_handle.param("manager/use_multitopology_trajs", plan_parameters_.use_multi_topology_trajectories, false);
     node_handle.param("manager/drone_id", plan_parameters_.drone_id, -1);

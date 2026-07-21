@@ -57,7 +57,7 @@
         <param name="fsm/realworld_experiment" value="true"/>
         <param name="fsm/fail_safe" value="true"/>
         <!-- Allow final goal modification -->
-        <param name="fsm/mondify_final_goal" value="true"/>
+        <param name="fsm/modify_final_goal" value="true"/>
         <!-- Enable stuck detection mechanism to handle deadlock situations -->
         <param name="fsm/enable_stuck_detect" value="true"/>
         <param name="fsm/waypoint_num" value="$(arg point_num)" type="int"/>
@@ -124,13 +124,13 @@
         <!-- planner manager -->
         <param name="manager/max_vel" value="$(arg max_vel)" type="double"/>
         <param name="manager/max_acc" value="$(arg max_acc)" type="double"/>
-        <param name="manager/polyTraj_piece_length" value="1.5" type="double"/>
+        <param name="manager/trajectory_piece_length" value="1.5" type="double"/>
         <param name="manager/feasibility_tolerance" value="0.05" type="double"/>
         <param name="manager/planning_horizon" value="$(arg planning_horizon)" type="double"/>
         <param name="manager/use_multitopology_trajs" value="$(arg use_multitopology_trajs)" type="bool"/>
         <param name="manager/drone_id" value="$(arg drone_id)"/>
         <!-- trajectory optimization -->
-        <param name="optimization/constraint_points_perPiece" value="5" type="int"/>
+        <param name="optimization/constraint_points_per_piece" value="5" type="int"/>
         <param name="optimization/weight_obstacle" value="10000.0" type="double"/>
         <param name="optimization/weight_obstacle_soft" value="5000.0" type="double"/>
         <param name="optimization/weight_swarm" value="10000.0" type="double"/>

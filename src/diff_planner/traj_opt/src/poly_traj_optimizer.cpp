@@ -1679,7 +1679,7 @@ namespace diff_planner
   /* helper functions */
   void PolyTrajOptimizer::SetParameters(ros::NodeHandle &nh)
   {
-    nh.param("optimization/constraint_points_perPiece", constraint_points_per_piece_, -1);
+    nh.param("optimization/constraint_points_per_piece", constraint_points_per_piece_, -1);
     nh.param("optimization/weight_obstacle", obstacle_weight_, -1.0);
     nh.param("optimization/weight_obstacle_soft", soft_obstacle_weight_, -1.0);
     nh.param("optimization/weight_swarm", swarm_weight_, -1.0);

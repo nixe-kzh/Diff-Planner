@@ -21,7 +21,7 @@ namespace diff_planner
     node_handle.param("fsm/realworld_experiment", is_real_world_experiment_, false);
     node_handle.param("fsm/fail_safe", enable_fail_safe_, true);
     node_handle.param("fsm/ground_height_measurement", enable_ground_height_measurement_, false);
-    node_handle.param("fsm/mondify_final_goal", modify_final_goal_, true);
+    node_handle.param("fsm/modify_final_goal", modify_final_goal_, true);
     node_handle.param("fsm/enable_stuck_detect", enable_stuck_detect_, true);
 
     node_handle.param("fsm/waypoint_num", waypoint_count_, -1);
