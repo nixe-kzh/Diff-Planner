@@ -6,6 +6,13 @@ using namespace std;
 using namespace uav_utils;
 
 namespace px4ctrl {
+namespace {
+
+void LogStateTransition(const char *transition) {
+    ROSFMT_INFO("\033[32mState: {}\033[0m", transition);
+}
+
+}  // namespace
 
 Px4CtrlFsm::Px4CtrlFsm(Parameters &parameters, Controller &controller) : parameters_(parameters), controller_(controller) { /*, thrust_curve(thrust_curve_)*/
     state_ = kManualControl;
@@ -70,7 +77,7 @@ void Px4CtrlFsm::Process() {
             SetHoverFromOdometry();
             ToggleOffboardMode(true);
 
-            ROSFMT_INFO("State: manual -> auto hover");
+            LogStateTransition("manual -> auto hover");
         } else if (parameters_.takeoff_land_.enable && takeoff_land_data_.triggered_ && takeoff_land_data_.takeoff_land_cmd_ == quadrotor_msgs::TakeoffLand::TAKEOFF) { // Try to jump to kAutoTakeoff
             if (!OdometryIsReceived(now_time)) {
                 ROSFMT_ERROR("Auto takeoff rejected: odometry unavailable");
@@ -116,7 +123,7 @@ void Px4CtrlFsm::Process() {
             }
             takeoff_land_state_.toggle_takeoff_land_time = now_time;
 
-            ROSFMT_INFO("State: manual -> auto takeoff");
+            LogStateTransition("manual -> auto takeoff");
         }
 
         if (rc_data_.toggle_reboot_) { // Try to reboot. EKF2 based PX4 FCU requires reboot when its state_ estimator goes wrong.
@@ -135,19 +142,19 @@ void Px4CtrlFsm::Process() {
             state_ = kManualControl;
             ToggleOffboardMode(false);
 
-            ROSFMT_WARN("State: auto hover -> manual");
+            LogStateTransition("auto hover -> manual");
         } else if (rc_data_.is_command_mode_ && CommandIsReceived(now_time)) {
             if (state_data_.current_state_.mode == "OFFBOARD") {
                 state_ = kCommandControl;
                 des = GetCommandDesiredState();
-                ROSFMT_INFO("State: auto hover -> command control");
+                LogStateTransition("auto hover -> command control");
             }
         } else if (takeoff_land_data_.triggered_ && takeoff_land_data_.takeoff_land_cmd_ == quadrotor_msgs::TakeoffLand::LAND) {
 
             state_ = kAutoLand;
             SetStartPoseForTakeoffLand(odom_data_);
 
-            ROSFMT_INFO("State: auto hover -> auto land");
+            LogStateTransition("auto hover -> auto land");
         } else {
             SetHoverFromRc();
             des = GetHoverDesiredState();
@@ -169,12 +176,12 @@ void Px4CtrlFsm::Process() {
             state_ = kManualControl;
             ToggleOffboardMode(false);
 
-            ROSFMT_WARN("State: command control -> manual");
+            LogStateTransition("command control -> manual");
         } else if (!rc_data_.is_command_mode_ || !CommandIsReceived(now_time)) {
             state_ = kAutoHover;
             SetHoverFromOdometry();
             des = GetHoverDesiredState();
-            ROSFMT_INFO("State: command control -> auto hover");
+            LogStateTransition("command control -> auto hover");
         } else {
             des = GetCommandDesiredState();
         }
@@ -193,7 +200,7 @@ void Px4CtrlFsm::Process() {
         } else if (odom_data_.p_(2) >= (takeoff_land_state_.start_pose(2) + parameters_.takeoff_land_.height)) { // reach the desired height
             state_ = kAutoHover;
             SetHoverFromOdometry();
-            ROSFMT_INFO("State: auto takeoff -> auto hover");
+            LogStateTransition("auto takeoff -> auto hover");
 
             takeoff_land_state_.delay_trigger.first = true;
             takeoff_land_state_.delay_trigger.second = now_time + ros::Duration(AutoTakeoffLandState::kDelayTriggerTime);
@@ -209,12 +216,12 @@ void Px4CtrlFsm::Process() {
             state_ = kManualControl;
             ToggleOffboardMode(false);
 
-            ROSFMT_WARN("State: auto land -> manual");
+            LogStateTransition("auto land -> manual");
         } else if (!rc_data_.is_command_mode_) {
             state_ = kAutoHover;
             SetHoverFromOdometry();
             des = GetHoverDesiredState();
-            ROSFMT_INFO("State: auto land -> auto hover");
+            LogStateTransition("auto land -> auto hover");
         } else if (!landed()) {
             des = GetTakeoffLandDesiredState(-parameters_.takeoff_land_.speed);
         } else {
@@ -233,7 +240,7 @@ void Px4CtrlFsm::Process() {
                         print_once_flag = true;
                         state_ = kManualControl;
                         ToggleOffboardMode(false); // toggle off offboard after disarm
-                        ROSFMT_INFO("State: auto land -> manual");
+                        LogStateTransition("auto land -> manual");
                     }
 
                     last_trial_time = now_time.toSec();

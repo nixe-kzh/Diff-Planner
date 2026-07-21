@@ -286,12 +286,7 @@ void BatteryData::Feed(sensor_msgs::BatteryStateConstPtr message) {
     percentage_ = message->percentage;
 
     static ros::Time last_print_t = ros::Time(0);
-    if (percentage_ > 0.05) {
-        if ((rcv_stamp_ - last_print_t).toSec() > 10) {
-            ROSFMT_INFO("Battery: {:.3f} V, {:.1f}%", volt_, percentage_ * 100.0);
-            last_print_t = rcv_stamp_;
-        }
-    } else {
+    if (percentage_ <= 0.05) {
         if ((rcv_stamp_ - last_print_t).toSec() > 1) {
             ROSFMT_ERROR("Battery critical: {:.3f} V, {:.1f}%", volt_, percentage_ * 100.0);
             last_print_t = rcv_stamp_;
