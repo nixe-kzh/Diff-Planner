@@ -1045,7 +1045,6 @@ namespace diff_planner
       double t = 0.0;
       Eigen::Vector3d line_segment = line_end - line_start;
       double squared_length = line_segment.squaredNorm();
-      double line_segment_length = line_segment.norm();
       if (squared_length < 1e-8)
       {
         t = 0.0;

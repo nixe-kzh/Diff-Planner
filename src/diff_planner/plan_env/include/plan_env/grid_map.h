@@ -153,7 +153,7 @@ public:
   inline double GetResolution();
   bool GetOdometryDepthTimeout() { return mapping_data_.flag_depth_odom_timeout; }
 
-  typedef std::shared_ptr<GridMap> Ptr;
+  using Ptr = std::shared_ptr<GridMap>;
 
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
@@ -215,12 +215,16 @@ private:
   // nav_msgs::Odometry> SyncPolicyImageOdom; typedef
   // message_filters::sync_policies::ExactTime<sensor_msgs::Image,
   // geometry_msgs::PoseStamped> SyncPolicyImagePose;
-  typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::Image, nav_msgs::Odometry>
-      SyncPolicyImageOdom;
-  typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::Image, geometry_msgs::PoseStamped>
-      SyncPolicyImagePose;
-  typedef shared_ptr<message_filters::Synchronizer<SyncPolicyImagePose>> SynchronizerImagePose;
-  typedef shared_ptr<message_filters::Synchronizer<SyncPolicyImageOdom>> SynchronizerImageOdom;
+  using SyncPolicyImageOdom =
+      message_filters::sync_policies::ApproximateTime<sensor_msgs::Image,
+                                                       nav_msgs::Odometry>;
+  using SyncPolicyImagePose =
+      message_filters::sync_policies::ApproximateTime<sensor_msgs::Image,
+                                                       geometry_msgs::PoseStamped>;
+  using SynchronizerImagePose =
+      std::shared_ptr<message_filters::Synchronizer<SyncPolicyImagePose>>;
+  using SynchronizerImageOdom =
+      std::shared_ptr<message_filters::Synchronizer<SyncPolicyImageOdom>>;
 
   ros::NodeHandle node_;
   shared_ptr<message_filters::Subscriber<sensor_msgs::Image>> depth_sub_;

@@ -39,7 +39,7 @@ namespace diff_planner
     ~PlanningVisualization() {}
     PlanningVisualization(ros::NodeHandle &nh);
 
-    typedef std::shared_ptr<PlanningVisualization> Ptr;
+    using Ptr = std::shared_ptr<PlanningVisualization>;
 
     void DisplayMarkerList(ros::Publisher &publisher,
                            const std::vector<Eigen::Vector3d> &points, double scale,

@@ -140,7 +140,7 @@ namespace diff_planner
   {
     poly_traj::Trajectory traj = trajectory_optimizer.GetTrajectory();
     Eigen::VectorXd durations = traj.GetDurations();
-    const double resolution = grid_map_->GetResolution(), half_resolution = resolution / 2;
+    const double resolution = grid_map_->GetResolution();
     double time_step = min(resolution / max_velocity_, durations.minCoeff() / max(constraint_points_per_piece_, 1) / 1.5);
     double trajectory_duration = traj.GetTotalDuration();
 

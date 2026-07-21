@@ -10,7 +10,7 @@
 
 constexpr double kInfinity = 1 >> 20;
 struct GridNode;
-typedef GridNode *GridNodePtr;
+using GridNodePtr = GridNode *;
 
 enum AStarResult
 {
@@ -84,7 +84,7 @@ private:
 	int search_round_{0};
 
 public:
-	typedef std::shared_ptr<AStar> Ptr;
+	using Ptr = std::shared_ptr<AStar>;
 
 	AStar(){};
 	~AStar();

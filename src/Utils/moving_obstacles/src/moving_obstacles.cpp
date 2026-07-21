@@ -11,149 +11,165 @@
 #include <traj_utils/planning_visualization.h>
 #include <optimizer/poly_traj_utils.hpp>
 
-using namespace std;
+ros::Publisher obstacle_one_odometry_publisher;
+ros::Publisher obstacle_two_odometry_publisher;
+ros::Publisher trajectory_publisher;
+ros::Publisher predicted_trajectory_publisher;
 
-ros::Publisher obs1_odom_pub_, obs2_odom_pub_, traj_pub_, predicted_traj_pub_;
+double obstacle_one_id;
+double obstacle_two_id;
 
-double obs1_id_, obs2_id_;
+diff_planner::PlanningVisualization::Ptr visualization;
 
-diff_planner::PlanningVisualization::Ptr visualization_;
-
-class moving_obstacle
-{
-private:
-  Eigen::Vector2d pos_{Eigen::Vector2d::Zero()};
-  Eigen::Vector2d vel_{Eigen::Vector2d::Zero()};
+class MovingObstacle {
+ private:
+  Eigen::Vector2d position_{Eigen::Vector2d::Zero()};
+  Eigen::Vector2d velocity_{Eigen::Vector2d::Zero()};
   double yaw_{0};
-  ros::Time t_last_update_{ros::Time(0)};
+  ros::Time last_update_time_{ros::Time(0)};
 
-public:
+ public:
+  double desired_clearance_;
 
-  double des_clearance_;
+  MovingObstacle() = default;
+  ~MovingObstacle() = default;
 
-  moving_obstacle(){};
-  ~moving_obstacle(){};
-
-  void set_position(Eigen::Vector2d pos)
-  {
-    pos_ = pos;
+  void SetPosition(Eigen::Vector2d pos) {
+    position_ = pos;
   }
 
-  double get_yaw() { return yaw_; }
+  double GetYaw() { return yaw_; }
 
-  void dyn_update(const double delta_t, const double acc, const double dir, double &yaw, Eigen::Vector2d &pos, Eigen::Vector2d &vel) const
-  {
+  void UpdateDynamics(const double delta_t, const double acc, const double dir,
+                      double &yaw, Eigen::Vector2d &pos,
+                      Eigen::Vector2d &vel) const {
     Eigen::Vector2d acc_vec = acc * Eigen::Vector2d(cos(yaw), sin(yaw));
     vel += acc_vec * delta_t;
     vel *= 0.9; // gradually stop like a real obstacle
-    constexpr double MAX_VEL = 2.0;
-    if (vel.norm() > MAX_VEL)
-    {
-      vel /= vel.norm() / MAX_VEL;
+    constexpr double kMaximumVelocity = 2.0;
+    if (vel.norm() > kMaximumVelocity) {
+      vel /= vel.norm() / kMaximumVelocity;
     }
     pos += vel * delta_t + 0.5 * acc_vec * delta_t * delta_t;
     yaw += dir * delta_t;
   }
 
-  std::pair<Eigen::Vector2d, Eigen::Vector2d> update(const double acc, const double dir)
-  {
-    ros::Time t_now = ros::Time::now();
-    if (t_last_update_ == ros::Time(0))
-    {
-      t_last_update_ = t_now;
+  std::pair<Eigen::Vector2d, Eigen::Vector2d> Update(
+      const double acc, const double dir) {
+    ros::Time current_time = ros::Time::now();
+    if (last_update_time_ == ros::Time(0)) {
+      last_update_time_ = current_time;
     }
 
-    double delta_t = (t_now - t_last_update_).toSec();
-    dyn_update(delta_t, acc, dir, yaw_, pos_, vel_);
+    double delta_t = (current_time - last_update_time_).toSec();
+    UpdateDynamics(delta_t, acc, dir, yaw_, position_, velocity_);
 
-    t_last_update_ = t_now;
+    last_update_time_ = current_time;
 
-    return std::pair<Eigen::Vector2d, Eigen::Vector2d>(pos_, vel_);
+    return {position_, velocity_};
   }
 
-  std::pair<Eigen::Vector2d, Eigen::Vector2d> predict(const double acc, const double dir, double predict_t) const
-  {
-    constexpr double STEP = 0.1;
+  std::pair<Eigen::Vector2d, Eigen::Vector2d> Predict(
+      const double acc, const double dir, double predict_t) const {
+    constexpr double kTimeStep = 0.1;
     double yaw = yaw_;
-    Eigen::Vector2d pos = pos_;
-    Eigen::Vector2d vel = vel_;
+    Eigen::Vector2d pos = position_;
+    Eigen::Vector2d vel = velocity_;
 
-    for (double t = STEP; t <= predict_t; t += STEP)
-    {
-      dyn_update(STEP, acc, dir, yaw, pos, vel);
+    for (double t = kTimeStep; t <= predict_t; t += kTimeStep) {
+      UpdateDynamics(kTimeStep, acc, dir, yaw, pos, vel);
     }
 
-    return std::pair<Eigen::Vector2d, Eigen::Vector2d>(pos, vel);
+    return {pos, vel};
   }
 };
 
-moving_obstacle obs1_, obs2_;
+MovingObstacle obstacle_one;
+MovingObstacle obstacle_two;
 
-poly_traj::Trajectory predict_traj(const double acc, const double dir, const Eigen::Vector3d p, const Eigen::Vector3d v, const moving_obstacle &obstacle, vector<Eigen::Vector3d> &vis_pts)
-{
-  vis_pts.clear();
-  constexpr double PRED_TIME = 5.0;
-  constexpr int SEG_NUM = 10;
+poly_traj::Trajectory PredictTrajectory(
+    const double acc, const double dir, const Eigen::Vector3d p,
+    const Eigen::Vector3d v, const MovingObstacle &obstacle,
+    std::vector<Eigen::Vector3d> &visualization_points) {
+  visualization_points.clear();
+  constexpr double kPredictionTime = 5.0;
+  constexpr int kSegmentCount = 10;
   poly_traj::MinJerkOpt predicted_traj;
-  Eigen::Matrix<double, 3, 3> headState, tailState;
-  headState << p, v, Eigen::Vector3d::Zero();
-  Eigen::MatrixXd innerPts(3, SEG_NUM - 1);
-  Eigen::VectorXd ts(SEG_NUM);
-  vis_pts.push_back(headState.col(0));
-  for (int i = 1; i < SEG_NUM; ++i)
-  {
-    auto pred_pv = obstacle.predict(acc, dir, PRED_TIME / SEG_NUM * i);
-    innerPts.col(i - 1) = Eigen::Vector3d(pred_pv.first(0), pred_pv.first(1), p(2));
-    ts(i - 1) = PRED_TIME / SEG_NUM;
-    vis_pts.push_back(innerPts.col(i - 1));
+  Eigen::Matrix<double, 3, 3> head_state, tail_state;
+  head_state << p, v, Eigen::Vector3d::Zero();
+  Eigen::MatrixXd inner_points(3, kSegmentCount - 1);
+  Eigen::VectorXd durations(kSegmentCount);
+  visualization_points.push_back(head_state.col(0));
+  for (int i = 1; i < kSegmentCount; ++i) {
+    auto predicted_state =
+        obstacle.Predict(acc, dir, kPredictionTime / kSegmentCount * i);
+    inner_points.col(i - 1) = Eigen::Vector3d(
+        predicted_state.first(0), predicted_state.first(1), p(2));
+    durations(i - 1) = kPredictionTime / kSegmentCount;
+    visualization_points.push_back(inner_points.col(i - 1));
   }
-  ts(SEG_NUM - 1) = PRED_TIME / SEG_NUM;
-  auto tail_pv = obstacle.predict(acc, dir, PRED_TIME);
-  tailState << Eigen::Vector3d(tail_pv.first(0), tail_pv.first(1), p(2)), Eigen::Vector3d(tail_pv.second(0), tail_pv.second(1), v(2)), Eigen::Vector3d::Zero();
-  vis_pts.push_back(tailState.col(0));
-  predicted_traj.Reset(headState, tailState, SEG_NUM);
-  predicted_traj.Generate(innerPts, ts);
+  durations(kSegmentCount - 1) = kPredictionTime / kSegmentCount;
+  auto final_state = obstacle.Predict(acc, dir, kPredictionTime);
+  tail_state << Eigen::Vector3d(final_state.first(0), final_state.first(1),
+                                p(2)),
+      Eigen::Vector3d(final_state.second(0), final_state.second(1), v(2)),
+      Eigen::Vector3d::Zero();
+  visualization_points.push_back(tail_state.col(0));
+  predicted_traj.Reset(head_state, tail_state, kSegmentCount);
+  predicted_traj.Generate(inner_points, durations);
   return predicted_traj.GetTrajectory();
 }
 
-void Traj2ROSMsg(const poly_traj::Trajectory &traj, const double des_clear, const int obstacle_id, traj_utils::MINCOTraj &MINCO_msg)
-{
+void ConvertTrajectoryToRosMessage(
+    const poly_traj::Trajectory &traj, const double desired_clearance,
+    const int obstacle_id, traj_utils::MINCOTraj &minco_message) {
+  Eigen::VectorXd durations = traj.GetDurations();
+  int piece_count = traj.GetPieceCount();
+  double duration = durations.sum();
 
-  Eigen::VectorXd durs = traj.GetDurations();
-  int piece_num = traj.GetPieceCount();
-  double duration = durs.sum();
-
-  MINCO_msg.drone_id = obstacle_id;
-  MINCO_msg.traj_id = 0;
-  MINCO_msg.start_time = ros::Time::now();
-  MINCO_msg.order = 5; // todo, only support order = 5 now.
-  MINCO_msg.duration.resize(piece_num);
-  MINCO_msg.des_clearance = des_clear;
-  Eigen::Vector3d vec;
-  vec = traj.GetPosition(0);
-  MINCO_msg.start_p[0] = vec(0), MINCO_msg.start_p[1] = vec(1), MINCO_msg.start_p[2] = vec(2);
-  vec = traj.GetVelocity(0);
-  MINCO_msg.start_v[0] = vec(0), MINCO_msg.start_v[1] = vec(1), MINCO_msg.start_v[2] = vec(2);
-  vec = traj.GetAcceleration(0);
-  MINCO_msg.start_a[0] = vec(0), MINCO_msg.start_a[1] = vec(1), MINCO_msg.start_a[2] = vec(2);
-  vec = traj.GetPosition(duration);
-  MINCO_msg.end_p[0] = vec(0), MINCO_msg.end_p[1] = vec(1), MINCO_msg.end_p[2] = vec(2);
-  vec = traj.GetVelocity(duration);
-  MINCO_msg.end_v[0] = vec(0), MINCO_msg.end_v[1] = vec(1), MINCO_msg.end_v[2] = vec(2);
-  vec = traj.GetAcceleration(duration);
-  MINCO_msg.end_a[0] = vec(0), MINCO_msg.end_a[1] = vec(1), MINCO_msg.end_a[2] = vec(2);
-  MINCO_msg.inner_x.resize(piece_num - 1);
-  MINCO_msg.inner_y.resize(piece_num - 1);
-  MINCO_msg.inner_z.resize(piece_num - 1);
+  minco_message.drone_id = obstacle_id;
+  minco_message.traj_id = 0;
+  minco_message.start_time = ros::Time::now();
+  minco_message.order = 5; // todo, only support order = 5 now.
+  minco_message.duration.resize(piece_count);
+  minco_message.des_clearance = desired_clearance;
+  Eigen::Vector3d vector;
+  vector = traj.GetPosition(0);
+  minco_message.start_p[0] = vector(0);
+  minco_message.start_p[1] = vector(1);
+  minco_message.start_p[2] = vector(2);
+  vector = traj.GetVelocity(0);
+  minco_message.start_v[0] = vector(0);
+  minco_message.start_v[1] = vector(1);
+  minco_message.start_v[2] = vector(2);
+  vector = traj.GetAcceleration(0);
+  minco_message.start_a[0] = vector(0);
+  minco_message.start_a[1] = vector(1);
+  minco_message.start_a[2] = vector(2);
+  vector = traj.GetPosition(duration);
+  minco_message.end_p[0] = vector(0);
+  minco_message.end_p[1] = vector(1);
+  minco_message.end_p[2] = vector(2);
+  vector = traj.GetVelocity(duration);
+  minco_message.end_v[0] = vector(0);
+  minco_message.end_v[1] = vector(1);
+  minco_message.end_v[2] = vector(2);
+  vector = traj.GetAcceleration(duration);
+  minco_message.end_a[0] = vector(0);
+  minco_message.end_a[1] = vector(1);
+  minco_message.end_a[2] = vector(2);
+  minco_message.inner_x.resize(piece_count - 1);
+  minco_message.inner_y.resize(piece_count - 1);
+  minco_message.inner_z.resize(piece_count - 1);
   Eigen::MatrixXd pos = traj.GetPositions();
-  for (int i = 0; i < piece_num - 1; i++)
-  {
-    MINCO_msg.inner_x[i] = pos(0, i + 1);
-    MINCO_msg.inner_y[i] = pos(1, i + 1);
-    MINCO_msg.inner_z[i] = pos(2, i + 1);
+  for (int i = 0; i < piece_count - 1; i++) {
+    minco_message.inner_x[i] = pos(0, i + 1);
+    minco_message.inner_y[i] = pos(1, i + 1);
+    minco_message.inner_z[i] = pos(2, i + 1);
   }
-  for (int i = 0; i < piece_num; i++)
-    MINCO_msg.duration[i] = durs[i];
+  for (int i = 0; i < piece_count; i++) {
+    minco_message.duration[i] = durations[i];
+  }
 }
 
 // #      ^                ^
@@ -162,94 +178,110 @@ void Traj2ROSMsg(const poly_traj::Trajectory &traj, const double des_clear, cons
 // #      |                |
 // #      V                V
 
-void joy_sub_cb(const sensor_msgs::Joy::ConstPtr &msg)
-{
-  ros::Time t_now = ros::Time::now();
+void JoyCallback(const sensor_msgs::Joy::ConstPtr &message) {
+  ros::Time current_time = ros::Time::now();
 
-  double acc1 = msg->axes[1] * 2;
-  double dir1 = msg->axes[0] / 3;
-  double acc2 = msg->axes[4] * 2;
-  double dir2 = msg->axes[3] / 3;
-  if (acc1 < 0)
+  double acc1 = message->axes[1] * 2;
+  double dir1 = message->axes[0] / 3;
+  double acc2 = message->axes[4] * 2;
+  double dir2 = message->axes[3] / 3;
+  if (acc1 < 0) {
     dir1 = -dir1;
-  if (acc2 < 0)
+  }
+  if (acc2 < 0) {
     dir2 = -dir2;
+  }
 
-  auto pv1 = obs1_.update(acc1, dir1);
-  auto pv2 = obs2_.update(acc2, dir2);
+  auto pv1 = obstacle_one.Update(acc1, dir1);
+  auto pv2 = obstacle_two.Update(acc2, dir2);
 
-  constexpr double HEIGHT = 1.0;
+  constexpr double kHeight = 1.0;
 
   // publish odometry
-  nav_msgs::Odometry odom_msg;
-  odom_msg.header.stamp = t_now;
-  odom_msg.header.frame_id = "world";
-  odom_msg.pose.pose.position.z = HEIGHT;
-  odom_msg.twist.twist.linear.z = 0.0;
-  odom_msg.pose.pose.orientation.x = 0.0;
-  odom_msg.pose.pose.orientation.y = 0.0;
+  nav_msgs::Odometry odometry_message;
+  odometry_message.header.stamp = current_time;
+  odometry_message.header.frame_id = "world";
+  odometry_message.pose.pose.position.z = kHeight;
+  odometry_message.twist.twist.linear.z = 0.0;
+  odometry_message.pose.pose.orientation.x = 0.0;
+  odometry_message.pose.pose.orientation.y = 0.0;
 
-  Eigen::Quaterniond q1(Eigen::AngleAxisd(obs1_.get_yaw(), Eigen::Vector3d::UnitZ()));
-  odom_msg.pose.pose.position.x = pv1.first(0);
-  odom_msg.pose.pose.position.y = pv1.first(1);
-  odom_msg.twist.twist.linear.x = pv1.second(0);
-  odom_msg.twist.twist.linear.y = pv1.second(1);
-  odom_msg.pose.pose.orientation.w = q1.w();
-  odom_msg.pose.pose.orientation.z = q1.z();
-  obs1_odom_pub_.publish(odom_msg);
+  Eigen::Quaterniond q1(Eigen::AngleAxisd(obstacle_one.GetYaw(),
+                                         Eigen::Vector3d::UnitZ()));
+  odometry_message.pose.pose.position.x = pv1.first(0);
+  odometry_message.pose.pose.position.y = pv1.first(1);
+  odometry_message.twist.twist.linear.x = pv1.second(0);
+  odometry_message.twist.twist.linear.y = pv1.second(1);
+  odometry_message.pose.pose.orientation.w = q1.w();
+  odometry_message.pose.pose.orientation.z = q1.z();
+  obstacle_one_odometry_publisher.publish(odometry_message);
   ros::Duration(0.005).sleep();
 
-  Eigen::Quaterniond q2(Eigen::AngleAxisd(obs2_.get_yaw(), Eigen::Vector3d::UnitZ()));
-  odom_msg.pose.pose.position.x = pv2.first(0);
-  odom_msg.pose.pose.position.y = pv2.first(1);
-  odom_msg.twist.twist.linear.x = pv2.second(0);
-  odom_msg.twist.twist.linear.y = pv2.second(1);
-  odom_msg.pose.pose.orientation.w = q2.w();
-  odom_msg.pose.pose.orientation.z = q2.z();
-  obs2_odom_pub_.publish(odom_msg);
+  Eigen::Quaterniond q2(Eigen::AngleAxisd(obstacle_two.GetYaw(),
+                                         Eigen::Vector3d::UnitZ()));
+  odometry_message.pose.pose.position.x = pv2.first(0);
+  odometry_message.pose.pose.position.y = pv2.first(1);
+  odometry_message.twist.twist.linear.x = pv2.second(0);
+  odometry_message.twist.twist.linear.y = pv2.second(1);
+  odometry_message.pose.pose.orientation.w = q2.w();
+  odometry_message.pose.pose.orientation.z = q2.z();
+  obstacle_two_odometry_publisher.publish(odometry_message);
   ros::Duration(0.005).sleep();
 
   // publish predicted trajectory
-  traj_utils::MINCOTraj MINCO_msg;
-  vector<Eigen::Vector3d> vis_pts;
-  poly_traj::Trajectory traj1 = predict_traj(acc1, dir1, Eigen::Vector3d(pv1.first[0], pv1.first[1], HEIGHT), Eigen::Vector3d(pv1.second[0], pv1.second[1], 0), obs1_, vis_pts);
-  Traj2ROSMsg(traj1, obs1_.des_clearance_, obs1_id_, MINCO_msg);
-  predicted_traj_pub_.publish(MINCO_msg);
+  traj_utils::MINCOTraj minco_message;
+  std::vector<Eigen::Vector3d> visualization_points;
+  poly_traj::Trajectory trajectory_one = PredictTrajectory(
+      acc1, dir1, Eigen::Vector3d(pv1.first[0], pv1.first[1], kHeight),
+      Eigen::Vector3d(pv1.second[0], pv1.second[1], 0), obstacle_one,
+      visualization_points);
+  ConvertTrajectoryToRosMessage(trajectory_one,
+                                obstacle_one.desired_clearance_,
+                                obstacle_one_id, minco_message);
+  predicted_trajectory_publisher.publish(minco_message);
   ros::Duration(0.005).sleep();
-  visualization_->DisplayInitialPathList(vis_pts, 0.1, obs1_id_);
+  visualization->DisplayInitialPathList(visualization_points, 0.1, obstacle_one_id);
   ros::Duration(0.005).sleep();
 
-  poly_traj::Trajectory traj2 = predict_traj(acc2, dir2, Eigen::Vector3d(pv2.first[0], pv2.first[1], HEIGHT), Eigen::Vector3d(pv2.second[0], pv2.second[1], 0), obs2_, vis_pts);
-  Traj2ROSMsg(traj2, obs2_.des_clearance_, obs2_id_, MINCO_msg);
-  predicted_traj_pub_.publish(MINCO_msg);
+  poly_traj::Trajectory trajectory_two = PredictTrajectory(
+      acc2, dir2, Eigen::Vector3d(pv2.first[0], pv2.first[1], kHeight),
+      Eigen::Vector3d(pv2.second[0], pv2.second[1], 0), obstacle_two,
+      visualization_points);
+  ConvertTrajectoryToRosMessage(trajectory_two,
+                                obstacle_two.desired_clearance_,
+                                obstacle_two_id, minco_message);
+  predicted_trajectory_publisher.publish(minco_message);
   ros::Duration(0.005).sleep();
-  visualization_->DisplayInitialPathList(vis_pts, 0.1, obs2_id_);
+  visualization->DisplayInitialPathList(visualization_points, 0.1, obstacle_two_id);
 }
 
-int main(int argc, char **argv)
-{
+int main(int argc, char **argv) {
   ros::init(argc, argv, "moving_obstacles");
-  ros::NodeHandle nh("~");
+  ros::NodeHandle node_handle("~");
 
-  obs1_odom_pub_ = nh.advertise<nav_msgs::Odometry>("odom_obs1", 10);
-  obs2_odom_pub_ = nh.advertise<nav_msgs::Odometry>("odom_obs2", 10);
-  predicted_traj_pub_ = nh.advertise<traj_utils::MINCOTraj>("/broadcast_traj_to_planner", 10);
-  ros::Subscriber joy_sub = nh.subscribe<sensor_msgs::Joy>("joy", 10, joy_sub_cb);
+  obstacle_one_odometry_publisher =
+      node_handle.advertise<nav_msgs::Odometry>("odom_obs1", 10);
+  obstacle_two_odometry_publisher =
+      node_handle.advertise<nav_msgs::Odometry>("odom_obs2", 10);
+  predicted_trajectory_publisher =
+      node_handle.advertise<traj_utils::MINCOTraj>(
+          "/broadcast_traj_to_planner", 10);
+  ros::Subscriber joystick_subscriber =
+      node_handle.subscribe<sensor_msgs::Joy>("joy", 10, JoyCallback);
 
-  visualization_.reset(new diff_planner::PlanningVisualization(nh));
+  visualization.reset(new diff_planner::PlanningVisualization(node_handle));
 
-  std::vector<double> init_pos;
-  nh.getParam("obstacle1_init_pos", init_pos);
-  obs1_.set_position(Eigen::Vector2d(init_pos[0], init_pos[1]));
-  nh.getParam("desired_clearance1", obs1_.des_clearance_);
-  nh.getParam("obstacle2_init_pos", init_pos);
-  obs2_.set_position(Eigen::Vector2d(init_pos[0], init_pos[1]));
-  nh.getParam("desired_clearance2", obs2_.des_clearance_);
-  nh.getParam("obstacle1_id", obs1_id_);
-  nh.getParam("obstacle2_id", obs2_id_);
+  std::vector<double> initial_position;
+  node_handle.getParam("obstacle1_init_pos", initial_position);
+  obstacle_one.SetPosition(Eigen::Vector2d(initial_position[0], initial_position[1]));
+  node_handle.getParam("desired_clearance1", obstacle_one.desired_clearance_);
+  node_handle.getParam("obstacle2_init_pos", initial_position);
+  obstacle_two.SetPosition(Eigen::Vector2d(initial_position[0], initial_position[1]));
+  node_handle.getParam("desired_clearance2", obstacle_two.desired_clearance_);
+  node_handle.getParam("obstacle1_id", obstacle_one_id);
+  node_handle.getParam("obstacle2_id", obstacle_two_id);
 
-  while (ros::ok())
-  {
+  while (ros::ok()) {
     ros::Duration(0.01).sleep();
     ros::spinOnce();
   }

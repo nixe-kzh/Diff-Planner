@@ -90,10 +90,18 @@ class DroneDetector
 
   //! ROS topic subscriber.
   // depth, colordepth, camera_pos subscriber
-  typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::Image, sensor_msgs::Image, geometry_msgs::PoseStamped> SyncPolicyDepthColorImagePose;
-  typedef std::shared_ptr<message_filters::Synchronizer<SyncPolicyDepthColorImagePose>> SynchronizerDepthColorImagePose;
-  typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::Image, geometry_msgs::PoseStamped> SyncPolicyDepthImagePose;
-  typedef std::shared_ptr<message_filters::Synchronizer<SyncPolicyDepthImagePose>> SynchronizerDepthImagePose;
+  using SyncPolicyDepthColorImagePose =
+      message_filters::sync_policies::ApproximateTime<
+          sensor_msgs::Image, sensor_msgs::Image,
+          geometry_msgs::PoseStamped>;
+  using SynchronizerDepthColorImagePose =
+      std::shared_ptr<message_filters::Synchronizer<
+          SyncPolicyDepthColorImagePose>>;
+  using SyncPolicyDepthImagePose =
+      message_filters::sync_policies::ApproximateTime<
+          sensor_msgs::Image, geometry_msgs::PoseStamped>;
+  using SynchronizerDepthImagePose =
+      std::shared_ptr<message_filters::Synchronizer<SyncPolicyDepthImagePose>>;
   
   // std::shared_ptr<message_filters::Subscriber<sensor_msgs::Image>> depth_img_sub_;
   std::shared_ptr<message_filters::Subscriber<sensor_msgs::Image>>

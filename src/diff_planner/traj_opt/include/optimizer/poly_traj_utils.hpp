@@ -1,4 +1,5 @@
-#pragma once
+#ifndef DIFF_PLANNER_TRAJ_OPT_INCLUDE_OPTIMIZER_POLY_TRAJ_UTILS_HPP_
+#define DIFF_PLANNER_TRAJ_OPT_INCLUDE_OPTIMIZER_POLY_TRAJ_UTILS_HPP_
 
 #include "root_finder.hpp"
 
@@ -12,9 +13,9 @@ namespace poly_traj
 {
 
     // Polynomial order and trajectory dimension are fixed here
-    typedef Eigen::Matrix<double, 3, 6> CoefficientMatrix;
-    typedef Eigen::Matrix<double, 3, 5> VelocityCoefficientMatrix;
-    typedef Eigen::Matrix<double, 3, 4> AccelerationCoefficientMatrix;
+    using CoefficientMatrix = Eigen::Matrix<double, 3, 6>;
+    using VelocityCoefficientMatrix = Eigen::Matrix<double, 3, 5>;
+    using AccelerationCoefficientMatrix = Eigen::Matrix<double, 3, 4>;
 
     class Piece
     {
@@ -388,7 +389,7 @@ namespace poly_traj
     class Trajectory
     {
     private:
-        typedef std::vector<Piece> PieceVector;
+        using PieceVector = std::vector<Piece>;
         PieceVector pieces_;
 
     public:
@@ -1397,3 +1398,5 @@ namespace poly_traj
     };
 
 }  // namespace poly_traj
+
+#endif  // DIFF_PLANNER_TRAJ_OPT_INCLUDE_OPTIMIZER_POLY_TRAJ_UTILS_HPP_
