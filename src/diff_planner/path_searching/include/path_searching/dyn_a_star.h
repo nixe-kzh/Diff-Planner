@@ -1,5 +1,5 @@
-#ifndef _DYN_A_STAR_H_
-#define _DYN_A_STAR_H_
+#ifndef DIFF_PLANNER_PATH_SEARCHING_INCLUDE_PATH_SEARCHING_DYN_A_STAR_H_
+#define DIFF_PLANNER_PATH_SEARCHING_INCLUDE_PATH_SEARCHING_DYN_A_STAR_H_
 
 #include <iostream>
 #include <ros/ros.h>
@@ -8,43 +8,43 @@
 #include <plan_env/grid_map.h>
 #include <queue>
 
-constexpr double inf = 1 >> 20;
+constexpr double kInfinity = 1 >> 20;
 struct GridNode;
 typedef GridNode *GridNodePtr;
 
-enum ASTAR_RET
+enum AStarResult
 {
-	SUCCESS,
-	INIT_ERR,
-	SEARCH_ERR
+	kSuccess,
+	kInitializationError,
+	kSearchError
 };
 
 struct GridNode
 {
-	enum enum_state
+	enum NodeState
 	{
-		OPENSET = 1,
-		CLOSEDSET = 2,
-		UNDEFINED = 3
+		kOpenSet = 1,
+		kClosedSet = 2,
+		kUndefined = 3
 	};
 
-	int rounds{0}; // Distinguish every call
-	enum enum_state state
+	int search_round{0}; // Distinguish every call
+	enum NodeState state
 	{
-		UNDEFINED
+		kUndefined
 	};
 	Eigen::Vector3i index;
 
-	double gScore{inf}, fScore{inf};
-	GridNodePtr cameFrom{NULL};
+	double g_score{kInfinity}, f_score{kInfinity};
+	GridNodePtr came_from{NULL};
 };
 
-class NodeComparator
+class GridNodeComparator
 {
 public:
-	bool operator()(GridNodePtr node1, GridNodePtr node2)
+	bool operator()(GridNodePtr first_node, GridNodePtr second_node)
 	{
-		return node1->fScore > node2->fScore;
+		return first_node->f_score > second_node->f_score;
 	}
 };
 
@@ -53,35 +53,35 @@ class AStar
 private:
 	GridMap::Ptr grid_map_;
 
-	inline void coord2gridIndexFast(const double x, const double y, const double z, int &id_x, int &id_y, int &id_z);
+	inline void CoordinateToGridIndexFast(const double x, const double y, const double z, int &id_x, int &id_y, int &id_z);
 
-	double getDiagHeu(GridNodePtr node1, GridNodePtr node2);
-	double getManhHeu(GridNodePtr node1, GridNodePtr node2);
-	double getEuclHeu(GridNodePtr node1, GridNodePtr node2);
-	inline double getHeu(GridNodePtr node1, GridNodePtr node2);
+	double DiagonalHeuristic(GridNodePtr first_node, GridNodePtr second_node);
+	double ManhattanHeuristic(GridNodePtr first_node, GridNodePtr second_node);
+	double EuclideanHeuristic(GridNodePtr first_node, GridNodePtr second_node);
+	inline double Heuristic(GridNodePtr first_node, GridNodePtr second_node);
 
-	bool ConvertToIndexAndAdjustStartEndPoints(const Eigen::Vector3d start_pt, const Eigen::Vector3d end_pt, Eigen::Vector3i &start_idx, Eigen::Vector3i &end_idx);
+	bool ConvertToIndicesAndAdjustEndpoints(const Eigen::Vector3d start_pt, const Eigen::Vector3d end_pt, Eigen::Vector3i &start_idx, Eigen::Vector3i &end_idx);
 
-	inline Eigen::Vector3d Index2Coord(const Eigen::Vector3i &index) const;
-	inline bool Coord2Index(const Eigen::Vector3d &pt, Eigen::Vector3i &idx) const;
+	inline Eigen::Vector3d IndexToCoordinate(const Eigen::Vector3i &index) const;
+	inline bool CoordinateToIndex(const Eigen::Vector3d &pt, Eigen::Vector3i &idx) const;
 
-	//bool (*checkOccupancyPtr)( const Eigen::Vector3d &pos );
+	// bool (*check_occupancy)(const Eigen::Vector3d &pos);
 
-	inline int checkOccupancy(const Eigen::Vector3d &pos) { return grid_map_->GetInflatedOccupancy(pos); }
+	inline int CheckOccupancy(const Eigen::Vector3d &pos) { return grid_map_->GetInflatedOccupancy(pos); }
 
-	std::vector<GridNodePtr> retrievePath(GridNodePtr current);
+	std::vector<GridNodePtr> RetrievePath(GridNodePtr current);
 
-	double step_size_, inv_step_size_;
+	double step_size_, inverse_step_size_;
 	Eigen::Vector3d center_;
-	Eigen::Vector3i CENTER_IDX_, POOL_SIZE_;
+	Eigen::Vector3i center_index_, pool_size_;
 	const double tie_breaker_ = 1.0 + 1.0 / 10000;
 
-	std::vector<GridNodePtr> gridPath_;
+	std::vector<GridNodePtr> grid_path_;
 
-	GridNodePtr ***GridNodeMap_;
-	std::priority_queue<GridNodePtr, std::vector<GridNodePtr>, NodeComparator> openSet_;
+	GridNodePtr ***grid_node_map_;
+	std::priority_queue<GridNodePtr, std::vector<GridNodePtr>, GridNodeComparator> open_set_;
 
-	int rounds_{0};
+	int search_round_{0};
 
 public:
 	typedef std::shared_ptr<AStar> Ptr;
@@ -89,28 +89,28 @@ public:
 	AStar(){};
 	~AStar();
 
-	void initGridMap(GridMap::Ptr occ_map, const Eigen::Vector3i pool_size);
+	void InitializeGridMap(GridMap::Ptr occ_map, const Eigen::Vector3i pool_size);
 
-	ASTAR_RET AstarSearch(const double step_size, Eigen::Vector3d start_pt, Eigen::Vector3d end_pt);
+	AStarResult Search(const double step_size, Eigen::Vector3d start_pt, Eigen::Vector3d end_pt);
 
-	std::vector<Eigen::Vector3d> getPath();
+	std::vector<Eigen::Vector3d> GetPath();
 };
 
-inline double AStar::getHeu(GridNodePtr node1, GridNodePtr node2)
+inline double AStar::Heuristic(GridNodePtr first_node, GridNodePtr second_node)
 {
-	return tie_breaker_ * getDiagHeu(node1, node2);
+	return tie_breaker_ * DiagonalHeuristic(first_node, second_node);
 }
 
-inline Eigen::Vector3d AStar::Index2Coord(const Eigen::Vector3i &index) const
+inline Eigen::Vector3d AStar::IndexToCoordinate(const Eigen::Vector3i &index) const
 {
-	return ((index - CENTER_IDX_).cast<double>() * step_size_) + center_;
+	return ((index - center_index_).cast<double>() * step_size_) + center_;
 };
 
-inline bool AStar::Coord2Index(const Eigen::Vector3d &pt, Eigen::Vector3i &idx) const
+inline bool AStar::CoordinateToIndex(const Eigen::Vector3d &pt, Eigen::Vector3i &idx) const
 {
-	idx = ((pt - center_) * inv_step_size_ + Eigen::Vector3d(0.5, 0.5, 0.5)).cast<int>() + CENTER_IDX_;
+	idx = ((pt - center_) * inverse_step_size_ + Eigen::Vector3d(0.5, 0.5, 0.5)).cast<int>() + center_index_;
 
-	if (idx(0) < 0 || idx(0) >= POOL_SIZE_(0) || idx(1) < 0 || idx(1) >= POOL_SIZE_(1) || idx(2) < 0 || idx(2) >= POOL_SIZE_(2))
+	if (idx(0) < 0 || idx(0) >= pool_size_(0) || idx(1) < 0 || idx(1) >= pool_size_(1) || idx(2) < 0 || idx(2) >= pool_size_(2))
 	{
 		ROS_ERROR("Ran out of pool, index=%d %d %d", idx(0), idx(1), idx(2));
 		return false;
@@ -119,4 +119,4 @@ inline bool AStar::Coord2Index(const Eigen::Vector3d &pt, Eigen::Vector3i &idx) 
 	return true;
 };
 
-#endif
+#endif  // DIFF_PLANNER_PATH_SEARCHING_INCLUDE_PATH_SEARCHING_DYN_A_STAR_H_

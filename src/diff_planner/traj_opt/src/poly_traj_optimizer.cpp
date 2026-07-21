@@ -347,12 +347,12 @@ namespace diff_planner
     {
       // Search from back to head
       Eigen::Vector3d in(init_points.col(segment_ids[i].second)), out(init_points.col(segment_ids[i].first));
-      ASTAR_RET ret = a_star_->AstarSearch(grid_map_->GetResolution(), in, out);
-      if (ret == ASTAR_RET::SUCCESS)
+      AStarResult ret = a_star_->Search(grid_map_->GetResolution(), in, out);
+      if (ret == AStarResult::kSuccess)
       {
-        a_star_pathes.push_back(a_star_->getPath());
+        a_star_pathes.push_back(a_star_->GetPath());
       }
-      else if (ret == ASTAR_RET::SEARCH_ERR && i + 1 < segment_ids.size()) // connect the next segment
+      else if (ret == AStarResult::kSearchError && i + 1 < segment_ids.size()) // connect the next segment
       {
         segment_ids[i].second = segment_ids[i + 1].second;
         segment_ids.erase(segment_ids.begin() + i + 1);
@@ -678,12 +678,12 @@ namespace diff_planner
       {
         /*** a star search ***/
         Eigen::Vector3d in(cps_.points.col(segment_ids[i].second)), out(cps_.points.col(segment_ids[i].first));
-        ASTAR_RET ret = a_star_->AstarSearch(/*(in-out).norm()/10+0.05*/ grid_map_->GetResolution(), in, out);
-        if (ret == ASTAR_RET::SUCCESS)
+        AStarResult ret = a_star_->Search(/*(in-out).norm()/10+0.05*/ grid_map_->GetResolution(), in, out);
+        if (ret == AStarResult::kSuccess)
         {
-          a_star_pathes.push_back(a_star_->getPath());
+          a_star_pathes.push_back(a_star_->GetPath());
         }
-        else if (ret == ASTAR_RET::SEARCH_ERR && i + 1 < segment_ids.size()) // connect the next segment
+        else if (ret == AStarResult::kSearchError && i + 1 < segment_ids.size()) // connect the next segment
         {
           segment_ids[i].second = segment_ids[i + 1].second;
           segment_ids.erase(segment_ids.begin() + i + 1);
@@ -1690,7 +1690,7 @@ namespace diff_planner
     grid_map_ = map;
 
     a_star_.reset(new AStar);
-    a_star_->initGridMap(grid_map_, Eigen::Vector3i(100, 100, 100));
+    a_star_->InitializeGridMap(grid_map_, Eigen::Vector3i(100, 100, 100));
   }
 
   void PolyTrajOptimizer::setControlPoints(const Eigen::MatrixXd &points)
