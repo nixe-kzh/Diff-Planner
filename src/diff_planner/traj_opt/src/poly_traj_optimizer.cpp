@@ -31,7 +31,7 @@ namespace diff_planner
     // Preparision 2: Trajectory related params
     t_now_ = ros::Time::now().toSec();
     piece_num_ = initT.size();
-    jerkOpt_.reset(iniState, finState, piece_num_);
+    jerkOpt_.Reset(iniState, finState, piece_num_);
     variable_num_ = 4 * (piece_num_ - 1) + 1;
     double x_init[variable_num_];
     memcpy(x_init, initInnerPts.data(), initInnerPts.size() * sizeof(x_init[0]));
@@ -138,17 +138,17 @@ namespace diff_planner
   }
   bool PolyTrajOptimizer::checkDynamicFeasibility(const poly_traj::MinJerkOpt &pt_data)
   {
-    poly_traj::Trajectory traj = pt_data.getTraj();
-    Eigen::VectorXd durations = traj.getDurations();
+    poly_traj::Trajectory traj = pt_data.GetTrajectory();
+    Eigen::VectorXd durations = traj.GetDurations();
     const double RES = grid_map_->GetResolution(), RES_2 = RES / 2;
     double t_step = min(RES / max_vel_, durations.minCoeff() / max(cps_num_prePiece_, 1) / 1.5);
-    double traj_duration = traj.getTotalDuration();
+    double traj_duration = traj.GetTotalDuration();
 
     // Iterate through the trajectory duration with the specified time step
     for (double t = 0.0; t < traj_duration; t += t_step)
     {
       // Check velocity constraint
-      Eigen::Vector3d vel = traj.getVel(t);
+      Eigen::Vector3d vel = traj.GetVelocity(t);
       if (vel.norm() > max_vel_+ vel_tolerance_)
       {
         ROS_WARN_STREAM("Dynamic feasibility check failed: velocity limit exceeded at t="
@@ -157,7 +157,7 @@ namespace diff_planner
       }
 
       // Check acceleration constraint
-      Eigen::Vector3d acc = traj.getAcc(t);
+      Eigen::Vector3d acc = traj.GetAcceleration(t);
       if (acc.norm() > max_acc_ + acc_tolerance_)
       {
         ROS_WARN_STREAM("Dynamic feasibility check failed: acceleration limit exceeded at t="
@@ -167,13 +167,13 @@ namespace diff_planner
     }
 
     // Check the very last point
-    Eigen::Vector3d vel_end = traj.getVel(traj_duration);
+    Eigen::Vector3d vel_end = traj.GetVelocity(traj_duration);
     if (vel_end.norm() > max_vel_ + vel_tolerance_)
     {
       ROS_WARN_STREAM("Dynamic feasibility check failed: velocity limit exceeded at the end of trajectory.");
       return false;
     }
-    Eigen::Vector3d acc_end = traj.getAcc(traj_duration);
+    Eigen::Vector3d acc_end = traj.GetAcceleration(traj_duration);
     if (acc_end.norm() > max_acc_ + acc_tolerance_)
     {
       ROS_WARN_STREAM("Dynamic feasibility check failed: acceleration limit exceeded at the end of trajectory.");
@@ -189,14 +189,14 @@ namespace diff_planner
     pts_check.clear();
     pts_check.resize(id_cps_end);
     const double RES = grid_map_->GetResolution(), RES_2 = RES / 2;
-    Eigen::VectorXd durations = traj.getDurations();
+    Eigen::VectorXd durations = traj.GetDurations();
     Eigen::VectorXd t_seg_start(durations.size() + 1);
     t_seg_start(0) = 0;
     for (int i = 0; i < durations.size(); ++i)
       t_seg_start(i + 1) = t_seg_start(i) + durations(i);
     const double DURATION = durations.sum();
     double t = 0.0, t_step = min(RES / max_vel_, durations.minCoeff() / max(cps_num_prePiece_, 1) / 1.5);
-    Eigen::Vector3d pt_last = traj.getPos(0.0);
+    Eigen::Vector3d pt_last = traj.GetPosition(0.0);
     // pts_check[0].push_back(pt_last);
     int id_cps_curr = 0, id_piece_curr = 0;
 
@@ -242,7 +242,7 @@ namespace diff_planner
         }
       }
 
-      Eigen::Vector3d pt = traj.getPos(t);
+      Eigen::Vector3d pt = traj.GetPosition(t);
       if (t < 1e-5 || pts_check[id_cps_curr].size() == 0 || (pt - pt_last).cwiseAbs().maxCoeff() > RES_2)
       {
         pts_check[id_cps_curr].emplace_back(std::pair<double, Eigen::Vector3d>(t, pt));
@@ -262,8 +262,8 @@ namespace diff_planner
       const bool flag_first_init /*= true*/)
   {
 
-    Eigen::MatrixXd init_points = pt_data.getInitConstraintPoints(cps_num_prePiece_);
-    poly_traj::Trajectory traj = pt_data.getTraj();
+    Eigen::MatrixXd init_points = pt_data.GetInitialConstraintPoints(cps_num_prePiece_);
+    poly_traj::Trajectory traj = pt_data.GetTrajectory();
 
     if (flag_first_init)
     {
@@ -1212,7 +1212,7 @@ namespace diff_planner
 
     opt->VirtualT2RealT(t, T); // Unbounded virtual time to real time
 
-    opt->jerkOpt_.generate(P, T); // Generate trajectory from {P,T}
+    opt->jerkOpt_.Generate(P, T); // Generate trajectory from {P,T}
 
     opt->initAndGetSmoothnessGradCost2PT(gradT, smoo_cost); // Smoothness cost
 
@@ -1223,7 +1223,7 @@ namespace diff_planner
       opt->roughlyCheckConstraintPoints(); // Trajectory rebound
     }
 
-    opt->jerkOpt_.getGrad2TP(gradT, gradP); // Gradient prepagation
+    opt->jerkOpt_.GetGradientsToTimeAndPoints(gradT, gradP); // Gradient prepagation
 
     opt->VirtualTGradCost(T, t, gradT, gradt, time_cost); // Real time back to virtual time
 
@@ -1288,7 +1288,7 @@ namespace diff_planner
   template <typename EIGENVEC>
   void PolyTrajOptimizer::initAndGetSmoothnessGradCost2PT(EIGENVEC &gdT, double &cost)
   {
-    jerkOpt_.initGradCost(gdT, cost);
+    jerkOpt_.InitializeGradientCost(gdT, cost);
   }
 
   template <typename EIGENVEC>
@@ -1316,8 +1316,8 @@ namespace diff_planner
     for (int i = 0; i < N; ++i)
     {
 
-      const Eigen::Matrix<double, 6, 3> &c = jerkOpt_.get_b().block<6, 3>(i * 6, 0);
-      step = jerkOpt_.get_T1()(i) / K;
+      const Eigen::Matrix<double, 6, 3> &c = jerkOpt_.GetCoefficients().block<6, 3>(i * 6, 0);
+      step = jerkOpt_.GetDurations()(i) / K;
       s1 = 0.0;
       // innerLoop = K;
 
@@ -1348,7 +1348,7 @@ namespace diff_planner
         {
           gradViolaPc = beta0 * gradp.transpose();
           gradViolaPt = alpha * gradp.transpose() * vel;
-          jerkOpt_.get_gdC().block<6, 3>(i * 6, 0) += omg * step * gradViolaPc;
+          jerkOpt_.GetCoefficientGradients().block<6, 3>(i * 6, 0) += omg * step * gradViolaPc;
           gdT(i) += omg * (costp / K + step * gradViolaPt);
           costs(0) += omg * step * costp;
         }
@@ -1359,7 +1359,7 @@ namespace diff_planner
         {
           gradViolaPc = beta0 * gradp.transpose();
           gradViolaPt = alpha * gradt;
-          jerkOpt_.get_gdC().block<6, 3>(i * 6, 0) += omg * step * gradViolaPc;
+          jerkOpt_.GetCoefficientGradients().block<6, 3>(i * 6, 0) += omg * step * gradViolaPc;
           gdT(i) += omg * (costp / K + step * gradViolaPt);
           if (i > 0)
           {
@@ -1373,7 +1373,7 @@ namespace diff_planner
         {
           gradViolaVc = beta1 * gradv.transpose();
           gradViolaVt = alpha * gradv.transpose() * acc;
-          jerkOpt_.get_gdC().block<6, 3>(i * 6, 0) += omg * step * gradViolaVc;
+          jerkOpt_.GetCoefficientGradients().block<6, 3>(i * 6, 0) += omg * step * gradViolaVc;
           gdT(i) += omg * (costv / K + step * gradViolaVt);
           costs(2) += omg * step * costv;
         }
@@ -1382,7 +1382,7 @@ namespace diff_planner
         {
           gradViolaAc = beta2 * grada.transpose();
           gradViolaAt = alpha * grada.transpose() * jer;
-          jerkOpt_.get_gdC().block<6, 3>(i * 6, 0) += omg * step * gradViolaAc;
+          jerkOpt_.GetCoefficientGradients().block<6, 3>(i * 6, 0) += omg * step * gradViolaAc;
           gdT(i) += omg * (costa / K + step * gradViolaAt);
           costs(2) += omg * step * costa;
         }
@@ -1391,7 +1391,7 @@ namespace diff_planner
         {
           gradViolaJc = beta3 * gradj.transpose();
           gradViolaJt = alpha * gradj.transpose() * sna;
-          jerkOpt_.get_gdC().block<6, 3>(i * 6, 0) += omg * step * gradViolaJc;
+          jerkOpt_.GetCoefficientGradients().block<6, 3>(i * 6, 0) += omg * step * gradViolaJc;
           gdT(i) += omg * (costj / K + step * gradViolaJt);
           costs(2) += omg * step * costj;
         }
@@ -1405,7 +1405,7 @@ namespace diff_planner
         }
       }
 
-      t += jerkOpt_.get_T1()(i);
+      t += jerkOpt_.GetDurations()(i);
     }
 
     // quratic variance
@@ -1417,7 +1417,7 @@ namespace diff_planner
     i_dp = 0;
     for (int i = 0; i < N; ++i)
     {
-      step = jerkOpt_.get_T1()(i) / K;
+      step = jerkOpt_.GetDurations()(i) / K;
       s1 = 0.0;
 
       for (int j = 0; j <= K; ++j)
@@ -1429,13 +1429,13 @@ namespace diff_planner
         beta0 << 1.0, s1, s2, s3, s4, s5;
         beta1 << 0.0, 1.0, 2.0 * s1, 3.0 * s2, 4.0 * s3, 5.0 * s4;
         alpha = 1.0 / K * j;
-        vel = jerkOpt_.get_b().block<6, 3>(i * 6, 0).transpose() * beta1;
+        vel = jerkOpt_.GetCoefficients().block<6, 3>(i * 6, 0).transpose() * beta1;
 
         omg = (j == 0 || j == K) ? 0.5 : 1.0;
 
         gradViolaPc = beta0 * gdp.col(i_dp).transpose();
         gradViolaPt = alpha * gdp.col(i_dp).transpose() * vel;
-        jerkOpt_.get_gdC().block<6, 3>(i * 6, 0) += omg * gradViolaPc;
+        jerkOpt_.GetCoefficientGradients().block<6, 3>(i * 6, 0) += omg * gradViolaPc;
         gdT(i) += omg * (gradViolaPt);
 
         s1 += step;
@@ -1528,14 +1528,14 @@ namespace diff_planner
       Eigen::Vector3d swarm_p, swarm_v;
       if (pt_time < swarm_trajs_->at(id).duration)
       {
-        swarm_p = swarm_trajs_->at(id).traj.getPos(pt_time);
-        swarm_v = swarm_trajs_->at(id).traj.getVel(pt_time);
+        swarm_p = swarm_trajs_->at(id).traj.GetPosition(pt_time);
+        swarm_v = swarm_trajs_->at(id).traj.GetVelocity(pt_time);
       }
       else
       {
         double exceed_time = pt_time - swarm_trajs_->at(id).duration;
-        swarm_v = swarm_trajs_->at(id).traj.getVel(swarm_trajs_->at(id).duration);
-        swarm_p = swarm_trajs_->at(id).traj.getPos(swarm_trajs_->at(id).duration) +
+        swarm_v = swarm_trajs_->at(id).traj.GetVelocity(swarm_trajs_->at(id).duration);
+        swarm_p = swarm_trajs_->at(id).traj.GetPosition(swarm_trajs_->at(id).duration) +
                   exceed_time * swarm_v;
       }
       Eigen::Vector3d dist_vec = p - swarm_p;

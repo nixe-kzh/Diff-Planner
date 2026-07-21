@@ -206,7 +206,7 @@ namespace diff_planner
       LocalTrajData *info = &planner_manager_->traj_.local_traj;
       double t_cur = ros::Time::now().toSec() - info->start_time;
       t_cur = min(info->duration, t_cur);
-      Eigen::Vector3d pos = info->traj.getPos(t_cur);
+      Eigen::Vector3d pos = info->traj.GetPosition(t_cur);
       bool touch_the_goal = ((local_target_pt_ - final_goal_).norm() < 1e-2);
 
       const PtsChk_t *chk_ptr = &planner_manager_->traj_.local_traj.pts_chk;
@@ -445,7 +445,7 @@ namespace diff_planner
 
     /* ---------- check trajectory ---------- */
     double t_temp = t_cur; // t_temp will be changed in the next function!
-    int i_start = info->traj.locatePieceIdx(t_temp);
+    int i_start = info->traj.LocatePieceIndex(t_temp);
 
     if (i_start >= (int)pts_chk.size())
     {
@@ -488,7 +488,7 @@ namespace diff_planner
           double t_X = t + (info->start_time - planner_manager_->traj_.swarm_traj.at(id).start_time);
           if (t_X > 0 && t_X < planner_manager_->traj_.swarm_traj.at(id).duration)
           {
-            Eigen::Vector3d swarm_pridicted = planner_manager_->traj_.swarm_traj.at(id).traj.getPos(t_X);
+            Eigen::Vector3d swarm_pridicted = planner_manager_->traj_.swarm_traj.at(id).traj.GetPosition(t_X);
             double dist = (p - swarm_pridicted).norm();
             double allowed_dist = planner_manager_->getSwarmClearance() + planner_manager_->traj_.swarm_traj.at(id).des_clearance;
             if (dist < allowed_dist)
@@ -604,9 +604,9 @@ namespace diff_planner
     LocalTrajData *info = &planner_manager_->traj_.local_traj;
     double t_cur = ros::Time::now().toSec() - info->start_time;
 
-    start_pt_ = info->traj.getPos(t_cur);
-    start_vel_ = info->traj.getVel(t_cur);
-    start_acc_ = info->traj.getAcc(t_cur);
+    start_pt_ = info->traj.GetPosition(t_cur);
+    start_vel_ = info->traj.GetVelocity(t_cur);
+    start_acc_ = info->traj.GetAcceleration(t_cur);
 
     bool success = callReboundReplan(false, false);
 
@@ -649,7 +649,7 @@ namespace diff_planner
       vector<Eigen::Vector3d> gloabl_traj(i_end);
       for (int i = 0; i < i_end; i++)
       {
-        gloabl_traj[i] = planner_manager_->traj_.global_traj.traj.getPos(i * step_size_t);
+        gloabl_traj[i] = planner_manager_->traj_.global_traj.traj.GetPosition(i * step_size_t);
       }
       have_target_ = true;
       have_new_target_ = true;
@@ -692,14 +692,14 @@ namespace diff_planner
       double t_step = planner_manager_->grid_map_->GetResolution() / planner_manager_->pp_.max_vel_;
       for (double t = planner_manager_->traj_.global_traj.duration; t > 0; t -= t_step)
       {
-        Eigen::Vector3d pt = planner_manager_->traj_.global_traj.traj.getPos(t);
+        Eigen::Vector3d pt = planner_manager_->traj_.global_traj.traj.GetPosition(t);
         if (!planner_manager_->grid_map_->GetInflatedOccupancy(pt))
         {
           for (int i = 6; i > 0; i--)
           {
             if (t - i * t_step > 0)
             {
-              Eigen::Vector3d pt_tmp = planner_manager_->traj_.global_traj.traj.getPos(t - i * t_step);
+              Eigen::Vector3d pt_tmp = planner_manager_->traj_.global_traj.traj.GetPosition(t - i * t_step);
               if (!planner_manager_->grid_map_->GetInflatedOccupancy(pt_tmp))
               {
                 pt = pt_tmp;
@@ -876,11 +876,11 @@ namespace diff_planner
     for (int i = 0; i < piece_nums; i++)
       durations(i) = msg->duration[i];
     poly_traj::MinJerkOpt MJO;
-    MJO.reset(headState, tailState, piece_nums);
-    MJO.generate(innerPts, durations);
+    MJO.Reset(headState, tailState, piece_nums);
+    MJO.Generate(innerPts, durations);
 
     /* Ignore the trajectories that are far away */
-    Eigen::MatrixXd cps_chk = MJO.getInitConstraintPoints(5); // K = 5, such accuracy is sufficient
+    Eigen::MatrixXd cps_chk = MJO.GetInitialConstraintPoints(5); // K = 5, such accuracy is sufficient
     bool far_away = true;
     for (int i = 0; i < cps_chk.cols(); ++i)
     {
@@ -892,13 +892,13 @@ namespace diff_planner
     }
     if (!far_away || !have_recv_pre_agent_) // Accept a far traj if no previous agent received
     {
-      poly_traj::Trajectory trajectory = MJO.getTraj();
+      poly_traj::Trajectory trajectory = MJO.GetTrajectory();
       planner_manager_->traj_.swarm_traj[recv_id].traj = trajectory;
       planner_manager_->traj_.swarm_traj[recv_id].drone_id = recv_id;
       planner_manager_->traj_.swarm_traj[recv_id].traj_id = msg->traj_id;
       planner_manager_->traj_.swarm_traj[recv_id].start_time = msg->start_time.toSec();
-      planner_manager_->traj_.swarm_traj[recv_id].duration = trajectory.getTotalDuration();
-      planner_manager_->traj_.swarm_traj[recv_id].start_pos = trajectory.getPos(0.0);
+      planner_manager_->traj_.swarm_traj[recv_id].duration = trajectory.GetTotalDuration();
+      planner_manager_->traj_.swarm_traj[recv_id].start_pos = trajectory.GetPosition(0.0);
       planner_manager_->traj_.swarm_traj[recv_id].des_clearance = msg->des_clearance;
 
       /* Check Collision */
@@ -934,8 +934,8 @@ namespace diff_planner
   {
 
     auto data = &planner_manager_->traj_.local_traj;
-    Eigen::VectorXd durs = data->traj.getDurations();
-    int piece_num = data->traj.getPieceNum();
+    Eigen::VectorXd durs = data->traj.GetDurations();
+    int piece_num = data->traj.GetPieceCount();
 
     poly_msg.drone_id = planner_manager_->pp_.drone_id;
     poly_msg.traj_id = data->traj_id;
@@ -949,7 +949,7 @@ namespace diff_planner
     {
       poly_msg.duration[i] = durs(i);
 
-      poly_traj::CoefficientMat cMat = data->traj.getPiece(i).getCoeffMat();
+      poly_traj::CoefficientMatrix cMat = data->traj.GetPiece(i).GetCoefficientMatrix();
       int i6 = i * 6;
       for (int j = 0; j < 6; j++)
       {
@@ -966,22 +966,22 @@ namespace diff_planner
     MINCO_msg.duration.resize(piece_num);
     MINCO_msg.des_clearance = planner_manager_->getSwarmClearance();
     Eigen::Vector3d vec;
-    vec = data->traj.getPos(0);
+    vec = data->traj.GetPosition(0);
     MINCO_msg.start_p[0] = vec(0), MINCO_msg.start_p[1] = vec(1), MINCO_msg.start_p[2] = vec(2);
-    vec = data->traj.getVel(0);
+    vec = data->traj.GetVelocity(0);
     MINCO_msg.start_v[0] = vec(0), MINCO_msg.start_v[1] = vec(1), MINCO_msg.start_v[2] = vec(2);
-    vec = data->traj.getAcc(0);
+    vec = data->traj.GetAcceleration(0);
     MINCO_msg.start_a[0] = vec(0), MINCO_msg.start_a[1] = vec(1), MINCO_msg.start_a[2] = vec(2);
-    vec = data->traj.getPos(data->duration);
+    vec = data->traj.GetPosition(data->duration);
     MINCO_msg.end_p[0] = vec(0), MINCO_msg.end_p[1] = vec(1), MINCO_msg.end_p[2] = vec(2);
-    vec = data->traj.getVel(data->duration);
+    vec = data->traj.GetVelocity(data->duration);
     MINCO_msg.end_v[0] = vec(0), MINCO_msg.end_v[1] = vec(1), MINCO_msg.end_v[2] = vec(2);
-    vec = data->traj.getAcc(data->duration);
+    vec = data->traj.GetAcceleration(data->duration);
     MINCO_msg.end_a[0] = vec(0), MINCO_msg.end_a[1] = vec(1), MINCO_msg.end_a[2] = vec(2);
     MINCO_msg.inner_x.resize(piece_num - 1);
     MINCO_msg.inner_y.resize(piece_num - 1);
     MINCO_msg.inner_z.resize(piece_num - 1);
-    Eigen::MatrixXd pos = data->traj.getPositions();
+    Eigen::MatrixXd pos = data->traj.GetPositions();
     for (int i = 0; i < piece_num - 1; i++)
     {
       MINCO_msg.inner_x[i] = pos(0, i + 1);
@@ -1007,7 +1007,7 @@ namespace diff_planner
     double traj_t = (t_now.toSec() - traj->start_time) + forward_t;
     if (traj_t <= traj->duration)
     {
-      Eigen::Vector3d forward_p = traj->traj.getPos(traj_t);
+      Eigen::Vector3d forward_p = traj->traj.GetPosition(traj_t);
 
       double reso = map->GetResolution();
       for (;; forward_p(2) -= reso)

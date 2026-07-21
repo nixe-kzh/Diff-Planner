@@ -62,7 +62,7 @@ namespace diff_planner
     void setGlobalTraj(const poly_traj::Trajectory &trajectory, const double &world_time)
     {
       global_traj.traj = trajectory;
-      global_traj.duration = trajectory.getTotalDuration();
+      global_traj.duration = trajectory.GetTotalDuration();
       global_traj.global_start_time = world_time;
       global_traj.glb_t_of_lc_tgt = world_time;
       global_traj.last_glb_t_of_lc_tgt = -1.0;
@@ -76,8 +76,8 @@ namespace diff_planner
     {
       local_traj.drone_id = drone_id;
       local_traj.traj_id++;
-      local_traj.duration = trajectory.getTotalDuration();
-      local_traj.start_pos = trajectory.getJuncPos(0);
+      local_traj.duration = trajectory.GetTotalDuration();
+      local_traj.start_pos = trajectory.GetJunctionPosition(0);
       local_traj.start_time = world_time;
       local_traj.traj = trajectory;
       local_traj.pts_chk = pts_to_chk;

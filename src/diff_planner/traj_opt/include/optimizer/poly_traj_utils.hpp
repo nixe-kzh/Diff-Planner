@@ -12,81 +12,81 @@ namespace poly_traj
 {
 
     // Polynomial order and trajectory dimension are fixed here
-    typedef Eigen::Matrix<double, 3, 6> CoefficientMat;
-    typedef Eigen::Matrix<double, 3, 5> VelCoefficientMat;
-    typedef Eigen::Matrix<double, 3, 4> AccCoefficientMat;
+    typedef Eigen::Matrix<double, 3, 6> CoefficientMatrix;
+    typedef Eigen::Matrix<double, 3, 5> VelocityCoefficientMatrix;
+    typedef Eigen::Matrix<double, 3, 4> AccelerationCoefficientMatrix;
 
     class Piece
     {
     private:
-        double duration;
-        CoefficientMat coeffMat;
+        double duration_;
+        CoefficientMatrix coefficient_matrix_;
 
     public:
         Piece() = default;
 
-        Piece(double dur, const CoefficientMat &cMat)
-            : duration(dur), coeffMat(cMat) {}
+        Piece(double duration, const CoefficientMatrix &coefficient_matrix)
+            : duration_(duration), coefficient_matrix_(coefficient_matrix) {}
 
-        inline int getDim() const
+        inline int GetDimension() const
         {
             return 3;
         }
 
-        inline int getOrder() const
+        inline int GetOrder() const
         {
             return 5;
         }
 
-        inline double getDuration() const
+        inline double GetDuration() const
         {
-            return duration;
+            return duration_;
         }
 
-        inline const CoefficientMat &getCoeffMat() const
+        inline const CoefficientMatrix &GetCoefficientMatrix() const
         {
-            return coeffMat;
+            return coefficient_matrix_;
         }
 
-        inline VelCoefficientMat getVelCoeffMat() const
+        inline VelocityCoefficientMatrix GetVelocityCoefficientMatrix() const
         {
-            VelCoefficientMat velCoeffMat;
+            VelocityCoefficientMatrix velocity_coefficient_matrix;
             int n = 1;
             for (int i = 4; i >= 0; i--)
             {
-                velCoeffMat.col(i) = n * coeffMat.col(i);
+                velocity_coefficient_matrix.col(i) = n * coefficient_matrix_.col(i);
                 n++;
             }
-            return velCoeffMat;
+            return velocity_coefficient_matrix;
         }
 
-        inline Eigen::Vector3d getPos(const double &t) const
+        inline Eigen::Vector3d GetPosition(const double &t) const
         {
             Eigen::Vector3d pos(0.0, 0.0, 0.0);
             double tn = 1.0;
             for (int i = 5; i >= 0; i--)
             {
-                pos += tn * coeffMat.col(i);
+                pos += tn * coefficient_matrix_.col(i);
                 tn *= t;
             }
             return pos;
         }
 
-        inline Eigen::Vector3d getVel(const double &t) const
+        inline Eigen::Vector3d GetVelocity(const double &t) const
         {
             Eigen::Vector3d vel(0.0, 0.0, 0.0);
             double tn = 1.0;
             int n = 1;
             for (int i = 4; i >= 0; i--)
             {
-                vel += n * tn * coeffMat.col(i);
+                vel += n * tn * coefficient_matrix_.col(i);
                 tn *= t;
                 n++;
             }
             return vel;
         }
 
-        inline Eigen::Vector3d getAcc(const double &t) const
+        inline Eigen::Vector3d GetAcceleration(const double &t) const
         {
             Eigen::Vector3d acc(0.0, 0.0, 0.0);
             double tn = 1.0;
@@ -94,7 +94,7 @@ namespace poly_traj
             int n = 2;
             for (int i = 3; i >= 0; i--)
             {
-                acc += m * n * tn * coeffMat.col(i);
+                acc += m * n * tn * coefficient_matrix_.col(i);
                 tn *= t;
                 m++;
                 n++;
@@ -102,7 +102,7 @@ namespace poly_traj
             return acc;
         }
 
-        inline Eigen::Vector3d getJer(const double &t) const
+        inline Eigen::Vector3d GetJerk(const double &t) const
         {
             Eigen::Vector3d jer(0.0, 0.0, 0.0);
             double tn = 1.0;
@@ -111,7 +111,7 @@ namespace poly_traj
             int n = 3;
             for (int i = 2; i >= 0; i--)
             {
-                jer += l * m * n * tn * coeffMat.col(i);
+                jer += l * m * n * tn * coefficient_matrix_.col(i);
                 tn *= t;
                 l++;
                 m++;
@@ -120,62 +120,62 @@ namespace poly_traj
             return jer;
         }
 
-        inline CoefficientMat normalizePosCoeffMat() const
+        inline CoefficientMatrix NormalizePositionCoefficientMatrix() const
         {
-            CoefficientMat nPosCoeffsMat;
+            CoefficientMatrix normalized_position_coefficients;
             double t = 1.0;
             for (int i = 5; i >= 0; i--)
             {
-                nPosCoeffsMat.col(i) = coeffMat.col(i) * t;
-                t *= duration;
+                normalized_position_coefficients.col(i) = coefficient_matrix_.col(i) * t;
+                t *= duration_;
             }
-            return nPosCoeffsMat;
+            return normalized_position_coefficients;
         }
 
-        inline VelCoefficientMat normalizeVelCoeffMat() const
+        inline VelocityCoefficientMatrix NormalizeVelocityCoefficientMatrix() const
         {
-            VelCoefficientMat nVelCoeffMat;
+            VelocityCoefficientMatrix normalized_velocity_coefficients;
             int n = 1;
-            double t = duration;
+            double t = duration_;
             for (int i = 4; i >= 0; i--)
             {
-                nVelCoeffMat.col(i) = n * coeffMat.col(i) * t;
-                t *= duration;
+                normalized_velocity_coefficients.col(i) = n * coefficient_matrix_.col(i) * t;
+                t *= duration_;
                 n++;
             }
-            return nVelCoeffMat;
+            return normalized_velocity_coefficients;
         }
 
-        inline AccCoefficientMat normalizeAccCoeffMat() const
+        inline AccelerationCoefficientMatrix NormalizeAccelerationCoefficientMatrix() const
         {
-            AccCoefficientMat nAccCoeffMat;
+            AccelerationCoefficientMatrix normalized_acceleration_coefficients;
             int n = 2;
             int m = 1;
-            double t = duration * duration;
+            double t = duration_ * duration_;
             for (int i = 3; i >= 0; i--)
             {
-                nAccCoeffMat.col(i) = n * m * coeffMat.col(i) * t;
+                normalized_acceleration_coefficients.col(i) = n * m * coefficient_matrix_.col(i) * t;
                 n++;
                 m++;
-                t *= duration;
+                t *= duration_;
             }
-            return nAccCoeffMat;
+            return normalized_acceleration_coefficients;
         }
 
-        inline double getMaxVelRate() const
+        inline double GetMaxVelocityRate() const
         {
-            Eigen::MatrixXd nVelCoeffMat = normalizeVelCoeffMat();
-            Eigen::VectorXd coeff = RootFinder::polySqr(nVelCoeffMat.row(0)) +
-                                    RootFinder::polySqr(nVelCoeffMat.row(1)) +
-                                    RootFinder::polySqr(nVelCoeffMat.row(2));
-            int N = coeff.size();
-            int n = N - 1;
-            for (int i = 0; i < N; i++)
+            Eigen::MatrixXd normalized_velocity_coefficients = NormalizeVelocityCoefficientMatrix();
+            Eigen::VectorXd coeff = RootFinder::polySqr(normalized_velocity_coefficients.row(0)) +
+                                    RootFinder::polySqr(normalized_velocity_coefficients.row(1)) +
+                                    RootFinder::polySqr(normalized_velocity_coefficients.row(2));
+            int coefficient_count = coeff.size();
+            int n = coefficient_count - 1;
+            for (int i = 0; i < coefficient_count; i++)
             {
                 coeff(i) *= n;
                 n--;
             }
-            if (coeff.head(N - 1).squaredNorm() < DBL_EPSILON)
+            if (coeff.head(coefficient_count - 1).squaredNorm() < DBL_EPSILON)
             {
                 return 0.0;
             }
@@ -183,48 +183,48 @@ namespace poly_traj
             {
                 double l = -0.0625;
                 double r = 1.0625;
-                while (fabs(RootFinder::polyVal(coeff.head(N - 1), l)) < DBL_EPSILON)
+                while (fabs(RootFinder::polyVal(coeff.head(coefficient_count - 1), l)) < DBL_EPSILON)
                 {
                     l = 0.5 * l;
                 }
-                while (fabs(RootFinder::polyVal(coeff.head(N - 1), r)) < DBL_EPSILON)
+                while (fabs(RootFinder::polyVal(coeff.head(coefficient_count - 1), r)) < DBL_EPSILON)
                 {
                     r = 0.5 * (r + 1.0);
                 }
-                std::set<double> candidates = RootFinder::solvePolynomial(coeff.head(N - 1), l, r,
-                                                                          FLT_EPSILON / duration);
+                std::set<double> candidates = RootFinder::solvePolynomial(coeff.head(coefficient_count - 1), l, r,
+                                                                          FLT_EPSILON / duration_);
                 candidates.insert(0.0);
                 candidates.insert(1.0);
-                double maxVelRateSqr = -INFINITY;
-                double tempNormSqr;
+                double max_velocity_rate_squared = -INFINITY;
+                double temporary_norm_squared;
                 for (std::set<double>::const_iterator it = candidates.begin();
                      it != candidates.end();
                      it++)
                 {
                     if (0.0 <= *it && 1.0 >= *it)
                     {
-                        tempNormSqr = getVel((*it) * duration).squaredNorm();
-                        maxVelRateSqr = maxVelRateSqr < tempNormSqr ? tempNormSqr : maxVelRateSqr;
+                        temporary_norm_squared = GetVelocity((*it) * duration_).squaredNorm();
+                        max_velocity_rate_squared = max_velocity_rate_squared < temporary_norm_squared ? temporary_norm_squared : max_velocity_rate_squared;
                     }
                 }
-                return sqrt(maxVelRateSqr);
+                return sqrt(max_velocity_rate_squared);
             }
         }
 
-        inline double getMaxAccRate() const
+        inline double GetMaxAccelerationRate() const
         {
-            Eigen::MatrixXd nAccCoeffMat = normalizeAccCoeffMat();
-            Eigen::VectorXd coeff = RootFinder::polySqr(nAccCoeffMat.row(0)) +
-                                    RootFinder::polySqr(nAccCoeffMat.row(1)) +
-                                    RootFinder::polySqr(nAccCoeffMat.row(2));
-            int N = coeff.size();
-            int n = N - 1;
-            for (int i = 0; i < N; i++)
+            Eigen::MatrixXd normalized_acceleration_coefficients = NormalizeAccelerationCoefficientMatrix();
+            Eigen::VectorXd coeff = RootFinder::polySqr(normalized_acceleration_coefficients.row(0)) +
+                                    RootFinder::polySqr(normalized_acceleration_coefficients.row(1)) +
+                                    RootFinder::polySqr(normalized_acceleration_coefficients.row(2));
+            int coefficient_count = coeff.size();
+            int n = coefficient_count - 1;
+            for (int i = 0; i < coefficient_count; i++)
             {
                 coeff(i) *= n;
                 n--;
             }
-            if (coeff.head(N - 1).squaredNorm() < DBL_EPSILON)
+            if (coeff.head(coefficient_count - 1).squaredNorm() < DBL_EPSILON)
             {
                 return 0.0;
             }
@@ -232,151 +232,151 @@ namespace poly_traj
             {
                 double l = -0.0625;
                 double r = 1.0625;
-                while (fabs(RootFinder::polyVal(coeff.head(N - 1), l)) < DBL_EPSILON)
+                while (fabs(RootFinder::polyVal(coeff.head(coefficient_count - 1), l)) < DBL_EPSILON)
                 {
                     l = 0.5 * l;
                 }
-                while (fabs(RootFinder::polyVal(coeff.head(N - 1), r)) < DBL_EPSILON)
+                while (fabs(RootFinder::polyVal(coeff.head(coefficient_count - 1), r)) < DBL_EPSILON)
                 {
                     r = 0.5 * (r + 1.0);
                 }
-                std::set<double> candidates = RootFinder::solvePolynomial(coeff.head(N - 1), l, r,
-                                                                          FLT_EPSILON / duration);
+                std::set<double> candidates = RootFinder::solvePolynomial(coeff.head(coefficient_count - 1), l, r,
+                                                                          FLT_EPSILON / duration_);
                 candidates.insert(0.0);
                 candidates.insert(1.0);
-                double maxAccRateSqr = -INFINITY;
-                double tempNormSqr;
+                double max_acceleration_rate_squared = -INFINITY;
+                double temporary_norm_squared;
                 for (std::set<double>::const_iterator it = candidates.begin();
                      it != candidates.end();
                      it++)
                 {
                     if (0.0 <= *it && 1.0 >= *it)
                     {
-                        tempNormSqr = getAcc((*it) * duration).squaredNorm();
-                        maxAccRateSqr = maxAccRateSqr < tempNormSqr ? tempNormSqr : maxAccRateSqr;
+                        temporary_norm_squared = GetAcceleration((*it) * duration_).squaredNorm();
+                        max_acceleration_rate_squared = max_acceleration_rate_squared < temporary_norm_squared ? temporary_norm_squared : max_acceleration_rate_squared;
                     }
                 }
-                return sqrt(maxAccRateSqr);
+                return sqrt(max_acceleration_rate_squared);
             }
         }
 
-        inline bool checkMaxVelRate(const double &maxVelRate) const
+        inline bool CheckMaxVelocityRate(const double &max_velocity_rate) const
         {
-            double sqrMaxVelRate = maxVelRate * maxVelRate;
-            if (getVel(0.0).squaredNorm() >= sqrMaxVelRate ||
-                getVel(duration).squaredNorm() >= sqrMaxVelRate)
+            double max_velocity_rate_squared = max_velocity_rate * max_velocity_rate;
+            if (GetVelocity(0.0).squaredNorm() >= max_velocity_rate_squared ||
+                GetVelocity(duration_).squaredNorm() >= max_velocity_rate_squared)
             {
                 return false;
             }
             else
             {
-                Eigen::MatrixXd nVelCoeffMat = normalizeVelCoeffMat();
-                Eigen::VectorXd coeff = RootFinder::polySqr(nVelCoeffMat.row(0)) +
-                                        RootFinder::polySqr(nVelCoeffMat.row(1)) +
-                                        RootFinder::polySqr(nVelCoeffMat.row(2));
-                double t2 = duration * duration;
-                coeff.tail<1>()(0) -= sqrMaxVelRate * t2;
+                Eigen::MatrixXd normalized_velocity_coefficients = NormalizeVelocityCoefficientMatrix();
+                Eigen::VectorXd coeff = RootFinder::polySqr(normalized_velocity_coefficients.row(0)) +
+                                        RootFinder::polySqr(normalized_velocity_coefficients.row(1)) +
+                                        RootFinder::polySqr(normalized_velocity_coefficients.row(2));
+                double t2 = duration_ * duration_;
+                coeff.tail<1>()(0) -= max_velocity_rate_squared * t2;
                 return RootFinder::countRoots(coeff, 0.0, 1.0) == 0;
             }
         }
 
-        inline bool checkMaxAccRate(const double &maxAccRate) const
+        inline bool CheckMaxAccelerationRate(const double &max_acceleration_rate) const
         {
-            double sqrMaxAccRate = maxAccRate * maxAccRate;
-            if (getAcc(0.0).squaredNorm() >= sqrMaxAccRate ||
-                getAcc(duration).squaredNorm() >= sqrMaxAccRate)
+            double max_acceleration_rate_squared = max_acceleration_rate * max_acceleration_rate;
+            if (GetAcceleration(0.0).squaredNorm() >= max_acceleration_rate_squared ||
+                GetAcceleration(duration_).squaredNorm() >= max_acceleration_rate_squared)
             {
                 return false;
             }
             else
             {
-                Eigen::MatrixXd nAccCoeffMat = normalizeAccCoeffMat();
-                Eigen::VectorXd coeff = RootFinder::polySqr(nAccCoeffMat.row(0)) +
-                                        RootFinder::polySqr(nAccCoeffMat.row(1)) +
-                                        RootFinder::polySqr(nAccCoeffMat.row(2));
-                double t2 = duration * duration;
+                Eigen::MatrixXd normalized_acceleration_coefficients = NormalizeAccelerationCoefficientMatrix();
+                Eigen::VectorXd coeff = RootFinder::polySqr(normalized_acceleration_coefficients.row(0)) +
+                                        RootFinder::polySqr(normalized_acceleration_coefficients.row(1)) +
+                                        RootFinder::polySqr(normalized_acceleration_coefficients.row(2));
+                double t2 = duration_ * duration_;
                 double t4 = t2 * t2;
-                coeff.tail<1>()(0) -= sqrMaxAccRate * t4;
+                coeff.tail<1>()(0) -= max_acceleration_rate_squared * t4;
                 return RootFinder::countRoots(coeff, 0.0, 1.0) == 0;
             }
         }
 
         // GaaiLam
-        inline bool project_pt(const Eigen::Vector3d &pt,
-                               double &tt, Eigen::Vector3d &pro_pt)
+        inline bool ProjectPoint(const Eigen::Vector3d &pt,
+                               double &projected_time, Eigen::Vector3d &projected_point)
         {
             // 2*(p-p0)^T * \dot{p} = 0
-            auto l_coeff = getCoeffMat();
-            l_coeff.col(5) = l_coeff.col(5) - pt;
-            auto r_coeff = getVelCoeffMat();
+            auto left_coefficients = GetCoefficientMatrix();
+            left_coefficients.col(5) = left_coefficients.col(5) - pt;
+            auto right_coefficients = GetVelocityCoefficientMatrix();
             Eigen::VectorXd eq = Eigen::VectorXd::Zero(2 * 5);
-            for (int j = 0; j < l_coeff.rows(); ++j)
+            for (int j = 0; j < left_coefficients.rows(); ++j)
             {
-                eq = eq + RootFinder::polyConv(l_coeff.row(j), r_coeff.row(j));
+                eq = eq + RootFinder::polyConv(left_coefficients.row(j), right_coefficients.row(j));
             }
             double l = -0.0625;
-            double r = duration + 0.0625;
+            double r = duration_ + 0.0625;
             while (fabs(RootFinder::polyVal(eq, l)) < DBL_EPSILON)
             {
                 l = 0.5 * l;
             }
             while (fabs(RootFinder::polyVal(eq, r)) < DBL_EPSILON)
             {
-                r = 0.5 * (duration + 1.0);
+                r = 0.5 * (duration_ + 1.0);
             }
             std::set<double> roots =
                 RootFinder::solvePolynomial(eq, l, r, 1e-6);
             // std::cout << "# roots: " << roots.size() << std::endl;
-            double min_dist = -1;
+            double minimum_distance = -1;
             for (const auto &root : roots)
             {
                 // std::cout << "root: " << root << std::endl;
-                if (root < 0 || root > duration)
+                if (root < 0 || root > duration_)
                 {
                     continue;
                 }
-                if (getVel(root).norm() < 1e-6)
+                if (GetVelocity(root).norm() < 1e-6)
                 { // velocity == 0, ignore it
                     continue;
                 }
                 // std::cout << "find min!" << std::endl;
-                Eigen::Vector3d p = getPos(root);
+                Eigen::Vector3d p = GetPosition(root);
                 // std::cout << "p: " << p.transpose() << std::endl;
                 double distance = (p - pt).norm();
-                if (distance < min_dist || min_dist < 0)
+                if (distance < minimum_distance || minimum_distance < 0)
                 {
-                    min_dist = distance;
-                    tt = root;
-                    pro_pt = p;
+                    minimum_distance = distance;
+                    projected_time = root;
+                    projected_point = p;
                 }
             }
-            return min_dist > 0;
+            return minimum_distance > 0;
         }
 
-        inline bool intersection_plane(const Eigen::Vector3d p,
+        inline bool IntersectPlane(const Eigen::Vector3d p,
                                        const Eigen::Vector3d v,
-                                       double &tt, Eigen::Vector3d &pt) const
+                                       double &projected_time, Eigen::Vector3d &pt) const
         {
             // (pt - p)^T * v = 0
-            auto coeff = getCoeffMat();
+            auto coeff = GetCoefficientMatrix();
             coeff.col(5) = coeff.col(5) - p;
             Eigen::VectorXd eq = coeff.transpose() * v;
             double l = -0.0625;
-            double r = duration + 0.0625;
+            double r = duration_ + 0.0625;
             while (fabs(RootFinder::polyVal(eq, l)) < DBL_EPSILON)
             {
                 l = 0.5 * l;
             }
             while (fabs(RootFinder::polyVal(eq, r)) < DBL_EPSILON)
             {
-                r = 0.5 * (duration + 1.0);
+                r = 0.5 * (duration_ + 1.0);
             }
             std::set<double> roots =
                 RootFinder::solvePolynomial(eq, l, r, 1e-6);
             for (const auto &root : roots)
             {
-                tt = root;
-                pt = getPos(root);
+                projected_time = root;
+                pt = GetPosition(root);
                 return true;
             }
             return false;
@@ -388,333 +388,333 @@ namespace poly_traj
     class Trajectory
     {
     private:
-        typedef std::vector<Piece> Pieces;
-        Pieces pieces;
+        typedef std::vector<Piece> PieceVector;
+        PieceVector pieces_;
 
     public:
         Trajectory() = default;
 
-        Trajectory(const std::vector<double> &durs,
-                   const std::vector<CoefficientMat> &cMats)
+        Trajectory(const std::vector<double> &durations,
+                   const std::vector<CoefficientMatrix> &coefficient_matrices)
         {
-            int N = std::min(durs.size(), cMats.size());
-            pieces.reserve(N);
-            for (int i = 0; i < N; i++)
+            int piece_count = std::min(durations.size(), coefficient_matrices.size());
+            pieces_.reserve(piece_count);
+            for (int i = 0; i < piece_count; i++)
             {
-                pieces.emplace_back(durs[i], cMats[i]);
+                pieces_.emplace_back(durations[i], coefficient_matrices[i]);
             }
         }
 
-        inline int getPieceNum() const
+        inline int GetPieceCount() const
         {
-            return pieces.size();
+            return pieces_.size();
         }
 
-        inline Eigen::VectorXd getDurations() const
+        inline Eigen::VectorXd GetDurations() const
         {
-            int N = getPieceNum();
-            Eigen::VectorXd durations(N);
-            for (int i = 0; i < N; i++)
+            int piece_count = GetPieceCount();
+            Eigen::VectorXd durations(piece_count);
+            for (int i = 0; i < piece_count; i++)
             {
-                durations(i) = pieces[i].getDuration();
+                durations(i) = pieces_[i].GetDuration();
             }
             return durations;
         }
 
-        inline double getTotalDuration() const
+        inline double GetTotalDuration() const
         {
-            int N = getPieceNum();
-            double totalDuration = 0.0;
-            for (int i = 0; i < N; i++)
+            int piece_count = GetPieceCount();
+            double total_duration = 0.0;
+            for (int i = 0; i < piece_count; i++)
             {
-                totalDuration += pieces[i].getDuration();
+                total_duration += pieces_[i].GetDuration();
             }
-            return totalDuration;
+            return total_duration;
         }
 
-        inline Eigen::MatrixXd getPositions() const
+        inline Eigen::MatrixXd GetPositions() const
         {
-            int N = getPieceNum();
-            Eigen::MatrixXd positions(3, N + 1);
-            for (int i = 0; i < N; i++)
+            int piece_count = GetPieceCount();
+            Eigen::MatrixXd positions(3, piece_count + 1);
+            for (int i = 0; i < piece_count; i++)
             {
-                positions.col(i) = pieces[i].getCoeffMat().col(5);
+                positions.col(i) = pieces_[i].GetCoefficientMatrix().col(5);
             }
-            positions.col(N) = pieces[N - 1].getPos(pieces[N - 1].getDuration());
+            positions.col(piece_count) = pieces_[piece_count - 1].GetPosition(pieces_[piece_count - 1].GetDuration());
             return positions;
         }
 
         inline const Piece &operator[](int i) const
         {
-            return pieces[i];
+            return pieces_[i];
         }
 
         inline Piece &operator[](int i)
         {
-            return pieces[i];
+            return pieces_[i];
         }
 
-        inline void clear(void)
+        inline void Clear(void)
         {
-            pieces.clear();
+            pieces_.clear();
             return;
         }
 
-        inline Pieces::const_iterator begin() const
+        inline PieceVector::const_iterator begin() const
         {
-            return pieces.begin();
+            return pieces_.begin();
         }
 
-        inline Pieces::const_iterator end() const
+        inline PieceVector::const_iterator end() const
         {
-            return pieces.end();
+            return pieces_.end();
         }
 
-        inline Pieces::iterator begin()
+        inline PieceVector::iterator begin()
         {
-            return pieces.begin();
+            return pieces_.begin();
         }
 
-        inline Pieces::iterator end()
+        inline PieceVector::iterator end()
         {
-            return pieces.end();
+            return pieces_.end();
         }
 
-        inline void reserve(const int &n)
+        inline void Reserve(const int &n)
         {
-            pieces.reserve(n);
+            pieces_.reserve(n);
             return;
         }
 
-        inline void emplace_back(const Piece &piece)
+        inline void EmplaceBack(const Piece &piece)
         {
-            pieces.emplace_back(piece);
+            pieces_.emplace_back(piece);
             return;
         }
 
-        inline void emplace_back(const double &dur,
-                                 const CoefficientMat &cMat)
+        inline void EmplaceBack(const double &duration,
+                                 const CoefficientMatrix &coefficient_matrix)
         {
-            pieces.emplace_back(dur, cMat);
+            pieces_.emplace_back(duration, coefficient_matrix);
             return;
         }
 
-        inline void append(const Trajectory &traj)
+        inline void Append(const Trajectory &traj)
         {
-            pieces.insert(pieces.end(), traj.begin(), traj.end());
+            pieces_.insert(pieces_.end(), traj.begin(), traj.end());
             return;
         }
 
-        inline int locatePieceIdx(double &t) const
+        inline int LocatePieceIndex(double &t) const
         {
-            int N = getPieceNum();
-            int idx;
-            double dur;
-            for (idx = 0;
-                 idx < N &&
-                 t > (dur = pieces[idx].getDuration());
-                 idx++)
+            int piece_count = GetPieceCount();
+            int index;
+            double duration;
+            for (index = 0;
+                 index < piece_count &&
+                 t > (duration = pieces_[index].GetDuration());
+                 index++)
             {
-                t -= dur;
+                t -= duration;
             }
-            if (idx == N)
+            if (index == piece_count)
             {
-                idx--;
-                t += pieces[idx].getDuration();
+                index--;
+                t += pieces_[index].GetDuration();
             }
-            return idx;
+            return index;
         }
 
-        inline Eigen::Vector3d getPos(double t) const
+        inline Eigen::Vector3d GetPosition(double t) const
         {
-            int pieceIdx = locatePieceIdx(t);
-            return pieces[pieceIdx].getPos(t);
+            int piece_index = LocatePieceIndex(t);
+            return pieces_[piece_index].GetPosition(t);
         }
 
-        inline Eigen::Vector3d getVel(double t) const
+        inline Eigen::Vector3d GetVelocity(double t) const
         {
-            int pieceIdx = locatePieceIdx(t);
-            return pieces[pieceIdx].getVel(t);
+            int piece_index = LocatePieceIndex(t);
+            return pieces_[piece_index].GetVelocity(t);
         }
 
-        inline Eigen::Vector3d getAcc(double t) const
+        inline Eigen::Vector3d GetAcceleration(double t) const
         {
-            int pieceIdx = locatePieceIdx(t);
-            return pieces[pieceIdx].getAcc(t);
+            int piece_index = LocatePieceIndex(t);
+            return pieces_[piece_index].GetAcceleration(t);
         }
 
-        inline Eigen::Vector3d getJer(double t) const
+        inline Eigen::Vector3d GetJerk(double t) const
         {
-            int pieceIdx = locatePieceIdx(t);
-            return pieces[pieceIdx].getJer(t);
+            int piece_index = LocatePieceIndex(t);
+            return pieces_[piece_index].GetJerk(t);
         }
 
-        inline Eigen::Vector3d getJuncPos(int juncIdx) const
+        inline Eigen::Vector3d GetJunctionPosition(int junction_index) const
         {
-            if (juncIdx != getPieceNum())
+            if (junction_index != GetPieceCount())
             {
-                return pieces[juncIdx].getCoeffMat().col(5);
+                return pieces_[junction_index].GetCoefficientMatrix().col(5);
             }
             else
             {
-                return pieces[juncIdx - 1].getPos(pieces[juncIdx - 1].getDuration());
+                return pieces_[junction_index - 1].GetPosition(pieces_[junction_index - 1].GetDuration());
             }
         }
 
-        inline Eigen::Vector3d getJuncVel(int juncIdx) const
+        inline Eigen::Vector3d GetJunctionVelocity(int junction_index) const
         {
-            if (juncIdx != getPieceNum())
+            if (junction_index != GetPieceCount())
             {
-                return pieces[juncIdx].getCoeffMat().col(4);
+                return pieces_[junction_index].GetCoefficientMatrix().col(4);
             }
             else
             {
-                return pieces[juncIdx - 1].getVel(pieces[juncIdx - 1].getDuration());
+                return pieces_[junction_index - 1].GetVelocity(pieces_[junction_index - 1].GetDuration());
             }
         }
 
-        inline Eigen::Vector3d getJuncAcc(int juncIdx) const
+        inline Eigen::Vector3d GetJunctionAcceleration(int junction_index) const
         {
-            if (juncIdx != getPieceNum())
+            if (junction_index != GetPieceCount())
             {
-                return pieces[juncIdx].getCoeffMat().col(3) * 2.0;
+                return pieces_[junction_index].GetCoefficientMatrix().col(3) * 2.0;
             }
             else
             {
-                return pieces[juncIdx - 1].getAcc(pieces[juncIdx - 1].getDuration());
+                return pieces_[junction_index - 1].GetAcceleration(pieces_[junction_index - 1].GetDuration());
             }
         }
 
-        inline double getMaxVelRate() const
+        inline double GetMaxVelocityRate() const
         {
-            int N = getPieceNum();
-            double maxVelRate = -INFINITY;
-            double tempNorm;
-            for (int i = 0; i < N; i++)
+            int piece_count = GetPieceCount();
+            double max_velocity_rate = -INFINITY;
+            double temporary_norm;
+            for (int i = 0; i < piece_count; i++)
             {
-                tempNorm = pieces[i].getMaxVelRate();
-                maxVelRate = maxVelRate < tempNorm ? tempNorm : maxVelRate;
+                temporary_norm = pieces_[i].GetMaxVelocityRate();
+                max_velocity_rate = max_velocity_rate < temporary_norm ? temporary_norm : max_velocity_rate;
             }
-            return maxVelRate;
+            return max_velocity_rate;
         }
 
-        inline double getMaxAccRate() const
+        inline double GetMaxAccelerationRate() const
         {
-            int N = getPieceNum();
-            double maxAccRate = -INFINITY;
-            double tempNorm;
-            for (int i = 0; i < N; i++)
+            int piece_count = GetPieceCount();
+            double max_acceleration_rate = -INFINITY;
+            double temporary_norm;
+            for (int i = 0; i < piece_count; i++)
             {
-                tempNorm = pieces[i].getMaxAccRate();
-                maxAccRate = maxAccRate < tempNorm ? tempNorm : maxAccRate;
+                temporary_norm = pieces_[i].GetMaxAccelerationRate();
+                max_acceleration_rate = max_acceleration_rate < temporary_norm ? temporary_norm : max_acceleration_rate;
             }
-            return maxAccRate;
+            return max_acceleration_rate;
         }
 
-        inline bool checkMaxVelRate(const double &maxVelRate) const
+        inline bool CheckMaxVelocityRate(const double &max_velocity_rate) const
         {
-            int N = getPieceNum();
+            int piece_count = GetPieceCount();
             bool feasible = true;
-            for (int i = 0; i < N && feasible; i++)
+            for (int i = 0; i < piece_count && feasible; i++)
             {
-                feasible = feasible && pieces[i].checkMaxVelRate(maxVelRate);
+                feasible = feasible && pieces_[i].CheckMaxVelocityRate(max_velocity_rate);
             }
             return feasible;
         }
 
-        inline bool checkMaxAccRate(const double &maxAccRate) const
+        inline bool CheckMaxAccelerationRate(const double &max_acceleration_rate) const
         {
-            int N = getPieceNum();
+            int piece_count = GetPieceCount();
             bool feasible = true;
-            for (int i = 0; i < N && feasible; i++)
+            for (int i = 0; i < piece_count && feasible; i++)
             {
-                feasible = feasible && pieces[i].checkMaxAccRate(maxAccRate);
+                feasible = feasible && pieces_[i].CheckMaxAccelerationRate(max_acceleration_rate);
             }
             return feasible;
         }
 
         // GaaiLam
-        inline Piece getPiece(int i) const
+        inline Piece GetPiece(int i) const
         {
-            return pieces[i];
+            return pieces_[i];
         }
 
-        inline bool project_pt(const Eigen::Vector3d &pt,
-                               int &ii, double &tt, Eigen::Vector3d &pro_pt)
+        inline bool ProjectPoint(const Eigen::Vector3d &pt,
+                               int &piece_index, double &piece_time, Eigen::Vector3d &projected_point)
         {
-            bool find_project_pt = false;
-            for (int i = 0; i < getPieceNum(); ++i)
+            bool found_projected_point = false;
+            for (int i = 0; i < GetPieceCount(); ++i)
             {
-                auto piece = pieces[i];
-                if (piece.project_pt(pt, tt, pro_pt))
+                auto piece = pieces_[i];
+                if (piece.ProjectPoint(pt, piece_time, projected_point))
                 {
-                    ii = i;
-                    find_project_pt = true;
+                    piece_index = i;
+                    found_projected_point = true;
                     break;
                 }
             }
-            if (!find_project_pt)
+            if (!found_projected_point)
             {
                 // std::cout << "\033[32m" << "cannot project pt to traj" << "\033[0m" << std::endl;
                 // std::cout << "pt: " << pt.transpose() << std::endl;
                 // assert(false);
             }
-            return find_project_pt;
+            return found_projected_point;
         }
-        inline bool intersection_plane(const Eigen::Vector3d p,
+        inline bool IntersectPlane(const Eigen::Vector3d p,
                                        const Eigen::Vector3d v,
-                                       int &ii, double &tt, Eigen::Vector3d &pt)
+                                       int &piece_index, double &piece_time, Eigen::Vector3d &pt)
         {
-            for (int i = 0; i < getPieceNum(); ++i)
+            for (int i = 0; i < GetPieceCount(); ++i)
             {
-                const auto &piece = pieces[i];
-                if (piece.intersection_plane(p, v, tt, pt))
+                const auto &piece = pieces_[i];
+                if (piece.IntersectPlane(p, v, piece_time, pt))
                 {
-                    ii = i;
+                    piece_index = i;
                     return true;
                 }
             }
             return false;
         }
 
-        inline std::vector<Eigen::Vector3d> way_points()
+        inline std::vector<Eigen::Vector3d> GetWaypoints()
         {
             std::vector<Eigen::Vector3d> pts;
-            for (int i = 0; i < getPieceNum(); ++i)
+            for (int i = 0; i < GetPieceCount(); ++i)
             {
-                pts.push_back(pieces[i].getPos(0));
+                pts.push_back(pieces_[i].GetPosition(0));
             }
             return pts;
         }
 
         // zxzx
-        inline std::pair<int, double> locatePieceIdxWithRatio(double &t) const
+        inline std::pair<int, double> LocatePieceIndexWithRatio(double &t) const
         {
-            int N = getPieceNum();
-            int idx;
-            double dur;
-            for (idx = 0;
-                 idx < N &&
-                 t > (dur = pieces[idx].getDuration());
-                 idx++)
+            int piece_count = GetPieceCount();
+            int index;
+            double duration;
+            for (index = 0;
+                 index < piece_count &&
+                 t > (duration = pieces_[index].GetDuration());
+                 index++)
             {
-                t -= dur;
+                t -= duration;
             }
-            if (idx == N)
+            if (index == piece_count)
             {
-                idx--;
-                t += pieces[idx].getDuration();
+                index--;
+                t += pieces_[index].GetDuration();
             }
-            std::pair<int, double> idx_ratio;
-            idx_ratio.first = idx;
-            idx_ratio.second = t / dur;
-            return idx_ratio;
+            std::pair<int, double> index_ratio;
+            index_ratio.first = index;
+            index_ratio.second = t / duration;
+            return index_ratio;
         }
 
-        inline Eigen::Vector3d getPoswithIdxRatio(double t, std::pair<int, double> &idx_ratio) const
+        inline Eigen::Vector3d GetPositionWithIndexRatio(double t, std::pair<int, double> &index_ratio) const
         {
-            idx_ratio = locatePieceIdxWithRatio(t);
-            return pieces[idx_ratio.first].getPos(t);
+            index_ratio = LocatePieceIndexWithRatio(t);
+            return pieces_[index_ratio.first].GetPosition(t);
         }
 
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
@@ -722,97 +722,96 @@ namespace poly_traj
 
     // The banded system class is used for solving
     // banded linear system Ax=b efficiently.
-    // A is an N*N band matrix with lower band width lowerBw
-    // and upper band width upperBw.
+    // A is an N*N band matrix with lower and upper bandwidths.
     // Banded LU factorization has O(N) time complexity.
     class BandedSystem
     {
     public:
         // The size of A, as well as the lower/upper
         // banded width p/q are needed
-        inline void create(const int &n, const int &p, const int &q)
+        inline void Create(const int &n, const int &p, const int &q)
         {
             // In case of re-creating before destroying
-            destroy();
-            N = n;
-            lowerBw = p;
-            upperBw = q;
-            int actualSize = N * (lowerBw + upperBw + 1);
-            ptrData = new double[actualSize];
-            std::fill_n(ptrData, actualSize, 0.0);
+            Destroy();
+            size_ = n;
+            lower_bandwidth_ = p;
+            upper_bandwidth_ = q;
+            int actual_size = size_ * (lower_bandwidth_ + upper_bandwidth_ + 1);
+            data_ = new double[actual_size];
+            std::fill_n(data_, actual_size, 0.0);
             return;
         }
 
-        inline void destroy()
+        inline void Destroy()
         {
-            if (ptrData != nullptr)
+            if (data_ != nullptr)
             {
-                delete[] ptrData;
-                ptrData = nullptr;
+                delete[] data_;
+                data_ = nullptr;
             }
             return;
         }
 
-        inline void operator=(const BandedSystem &bs)
+        inline void operator=(const BandedSystem &other)
         {
-            ptrData = nullptr;
-            create(bs.N, bs.lowerBw, bs.upperBw);
-            memcpy(ptrData, bs.ptrData, N * (lowerBw + upperBw + 1) * sizeof(double));
+            data_ = nullptr;
+            Create(other.size_, other.lower_bandwidth_, other.upper_bandwidth_);
+            memcpy(data_, other.data_, size_ * (lower_bandwidth_ + upper_bandwidth_ + 1) * sizeof(double));
         }
 
     private:
-        int N;
-        int lowerBw;
-        int upperBw;
-        double *ptrData = nullptr;
+        int size_;
+        int lower_bandwidth_;
+        int upper_bandwidth_;
+        double *data_ = nullptr;
 
     public:
         // Reset the matrix to zero
-        inline void reset(void)
+        inline void Reset(void)
         {
-            std::fill_n(ptrData, N * (lowerBw + upperBw + 1), 0.0);
+            std::fill_n(data_, size_ * (lower_bandwidth_ + upper_bandwidth_ + 1), 0.0);
             return;
         }
 
         // The band matrix is stored as suggested in "Matrix Computation"
         inline const double &operator()(const int &i, const int &j) const
         {
-            return ptrData[(i - j + upperBw) * N + j];
+            return data_[(i - j + upper_bandwidth_) * size_ + j];
         }
 
         inline double &operator()(const int &i, const int &j)
         {
-            return ptrData[(i - j + upperBw) * N + j];
+            return data_[(i - j + upper_bandwidth_) * size_ + j];
         }
 
         // This function conducts banded LU factorization in place
         // Note that NO PIVOT is applied on the matrix "A" for efficiency!!!
-        inline void factorizeLU()
+        inline void FactorizeLu()
         {
-            int iM, jM;
-            double cVl;
-            for (int k = 0; k <= N - 2; k++)
+            int max_row, max_column;
+            double matrix_value;
+            for (int k = 0; k <= size_ - 2; k++)
             {
-                iM = std::min(k + lowerBw, N - 1);
-                cVl = operator()(k, k);
-                for (int i = k + 1; i <= iM; i++)
+                max_row = std::min(k + lower_bandwidth_, size_ - 1);
+                matrix_value = operator()(k, k);
+                for (int i = k + 1; i <= max_row; i++)
                 {
                     if (operator()(i, k) != 0.0)
                     {
-                        operator()(i, k) /= cVl;
+                        operator()(i, k) /= matrix_value;
                     }
                 }
-                jM = std::min(k + upperBw, N - 1);
-                for (int j = k + 1; j <= jM; j++)
+                max_column = std::min(k + upper_bandwidth_, size_ - 1);
+                for (int j = k + 1; j <= max_column; j++)
                 {
-                    cVl = operator()(k, j);
-                    if (cVl != 0.0)
+                    matrix_value = operator()(k, j);
+                    if (matrix_value != 0.0)
                     {
-                        for (int i = k + 1; i <= iM; i++)
+                        for (int i = k + 1; i <= max_row; i++)
                         {
                             if (operator()(i, k) != 0.0)
                             {
-                                operator()(i, j) -= operator()(i, k) * cVl;
+                                operator()(i, j) -= operator()(i, k) * matrix_value;
                             }
                         }
                     }
@@ -822,15 +821,15 @@ namespace poly_traj
         }
 
         // This function solves Ax=b, then stores x in b
-        // The input b is required to be N*m, i.e.,
+        // The input b is required to be size_*m, i.e.,
         // m vectors to be solved.
-        inline void solve(Eigen::MatrixXd &b) const
+        inline void Solve(Eigen::MatrixXd &b) const
         {
-            int iM;
-            for (int j = 0; j <= N - 1; j++)
+            int max_row;
+            for (int j = 0; j <= size_ - 1; j++)
             {
-                iM = std::min(j + lowerBw, N - 1);
-                for (int i = j + 1; i <= iM; i++)
+                max_row = std::min(j + lower_bandwidth_, size_ - 1);
+                for (int i = j + 1; i <= max_row; i++)
                 {
                     if (operator()(i, j) != 0.0)
                     {
@@ -838,11 +837,11 @@ namespace poly_traj
                     }
                 }
             }
-            for (int j = N - 1; j >= 0; j--)
+            for (int j = size_ - 1; j >= 0; j--)
             {
                 b.row(j) /= operator()(j, j);
-                iM = std::max(0, j - upperBw);
-                for (int i = iM; i <= j - 1; i++)
+                max_row = std::max(0, j - upper_bandwidth_);
+                for (int i = max_row; i <= j - 1; i++)
                 {
                     if (operator()(i, j) != 0.0)
                     {
@@ -854,16 +853,16 @@ namespace poly_traj
         }
 
         // This function solves ATx=b, then stores x in b
-        // The input b is required to be N*m, i.e.,
+        // The input b is required to be size_*m, i.e.,
         // m vectors to be solved.
-        inline void solveAdj(Eigen::MatrixXd &b) const
+        inline void SolveAdjoint(Eigen::MatrixXd &b) const
         {
-            int iM;
-            for (int j = 0; j <= N - 1; j++)
+            int max_row;
+            for (int j = 0; j <= size_ - 1; j++)
             {
                 b.row(j) /= operator()(j, j);
-                iM = std::min(j + upperBw, N - 1);
-                for (int i = j + 1; i <= iM; i++)
+                max_row = std::min(j + upper_bandwidth_, size_ - 1);
+                for (int i = j + 1; i <= max_row; i++)
                 {
                     if (operator()(j, i) != 0.0)
                     {
@@ -871,10 +870,10 @@ namespace poly_traj
                     }
                 }
             }
-            for (int j = N - 1; j >= 0; j--)
+            for (int j = size_ - 1; j >= 0; j--)
             {
-                iM = std::max(0, j - lowerBw);
-                for (int i = iM; i <= j - 1; i++)
+                max_row = std::max(0, j - lower_bandwidth_);
+                for (int i = max_row; i <= j - 1; i++)
                 {
                     if (operator()(j, i) != 0.0)
                     {
@@ -891,452 +890,452 @@ namespace poly_traj
     class MinJerkOpt
     {
     public:
-        inline void operator=(const MinJerkOpt &mjo)
+        inline void operator=(const MinJerkOpt &other)
         {
-            N = mjo.N;
-            headPVA = mjo.headPVA;
-            tailPVA = mjo.tailPVA;
-            T1 = mjo.T1;
-            A = mjo.A;
-            b = mjo.b;
-            T2 = mjo.T2;
-            T3 = mjo.T3;
-            T4 = mjo.T4;
-            T5 = mjo.T5;
-            gdC = mjo.gdC;
+            piece_count_ = other.piece_count_;
+            head_state_ = other.head_state_;
+            tail_state_ = other.tail_state_;
+            durations_ = other.durations_;
+            banded_system_ = other.banded_system_;
+            coefficients_ = other.coefficients_;
+            durations_squared_ = other.durations_squared_;
+            durations_cubed_ = other.durations_cubed_;
+            durations_fourth_ = other.durations_fourth_;
+            durations_fifth_ = other.durations_fifth_;
+            coefficient_gradients_ = other.coefficient_gradients_;
         }
-        ~MinJerkOpt() { A.destroy(); }
+        ~MinJerkOpt() { banded_system_.Destroy(); }
 
     private:
-        int N;
-        Eigen::Matrix3d headPVA;
-        Eigen::Matrix3d tailPVA;
-        Eigen::VectorXd T1;
-        BandedSystem A;
-        Eigen::MatrixXd b;
+        int piece_count_;
+        Eigen::Matrix3d head_state_;
+        Eigen::Matrix3d tail_state_;
+        Eigen::VectorXd durations_;
+        BandedSystem banded_system_;
+        Eigen::MatrixXd coefficients_;
 
         // Temp variables
-        Eigen::VectorXd T2;
-        Eigen::VectorXd T3;
-        Eigen::VectorXd T4;
-        Eigen::VectorXd T5;
-        Eigen::MatrixXd gdC;
+        Eigen::VectorXd durations_squared_;
+        Eigen::VectorXd durations_cubed_;
+        Eigen::VectorXd durations_fourth_;
+        Eigen::VectorXd durations_fifth_;
+        Eigen::MatrixXd coefficient_gradients_;
 
     private:
-        template <typename EIGENVEC>
-        inline void addGradJbyT(EIGENVEC &gdT) const
+        template <typename EigenVectorType>
+        inline void AddJerkGradientToDurations(EigenVectorType &duration_gradients) const
         {
-            for (int i = 0; i < N; i++)
+            for (int i = 0; i < piece_count_; i++)
             {
-                gdT(i) += 36.0 * b.row(6 * i + 3).squaredNorm() +
-                          288.0 * b.row(6 * i + 4).dot(b.row(6 * i + 3)) * T1(i) +
-                          576.0 * b.row(6 * i + 4).squaredNorm() * T2(i) +
-                          720.0 * b.row(6 * i + 5).dot(b.row(6 * i + 3)) * T2(i) +
-                          2880.0 * b.row(6 * i + 5).dot(b.row(6 * i + 4)) * T3(i) +
-                          3600.0 * b.row(6 * i + 5).squaredNorm() * T4(i);
+                duration_gradients(i) += 36.0 * coefficients_.row(6 * i + 3).squaredNorm() +
+                          288.0 * coefficients_.row(6 * i + 4).dot(coefficients_.row(6 * i + 3)) * durations_(i) +
+                          576.0 * coefficients_.row(6 * i + 4).squaredNorm() * durations_squared_(i) +
+                          720.0 * coefficients_.row(6 * i + 5).dot(coefficients_.row(6 * i + 3)) * durations_squared_(i) +
+                          2880.0 * coefficients_.row(6 * i + 5).dot(coefficients_.row(6 * i + 4)) * durations_cubed_(i) +
+                          3600.0 * coefficients_.row(6 * i + 5).squaredNorm() * durations_fourth_(i);
             }
             return;
         }
 
-        template <typename EIGENMAT>
-        inline void addGradJbyC(EIGENMAT &gdC) const
+        template <typename EigenMatrixType>
+        inline void AddJerkGradientToCoefficients(EigenMatrixType &coefficient_gradients) const
         {
-            for (int i = 0; i < N; i++)
+            for (int i = 0; i < piece_count_; i++)
             {
-                gdC.row(6 * i + 5) += 240.0 * b.row(6 * i + 3) * T3(i) +
-                                      720.0 * b.row(6 * i + 4) * T4(i) +
-                                      1440.0 * b.row(6 * i + 5) * T5(i);
-                gdC.row(6 * i + 4) += 144.0 * b.row(6 * i + 3) * T2(i) +
-                                      384.0 * b.row(6 * i + 4) * T3(i) +
-                                      720.0 * b.row(6 * i + 5) * T4(i);
-                gdC.row(6 * i + 3) += 72.0 * b.row(6 * i + 3) * T1(i) +
-                                      144.0 * b.row(6 * i + 4) * T2(i) +
-                                      240.0 * b.row(6 * i + 5) * T3(i);
+                coefficient_gradients.row(6 * i + 5) += 240.0 * coefficients_.row(6 * i + 3) * durations_cubed_(i) +
+                                      720.0 * coefficients_.row(6 * i + 4) * durations_fourth_(i) +
+                                      1440.0 * coefficients_.row(6 * i + 5) * durations_fifth_(i);
+                coefficient_gradients.row(6 * i + 4) += 144.0 * coefficients_.row(6 * i + 3) * durations_squared_(i) +
+                                      384.0 * coefficients_.row(6 * i + 4) * durations_cubed_(i) +
+                                      720.0 * coefficients_.row(6 * i + 5) * durations_fourth_(i);
+                coefficient_gradients.row(6 * i + 3) += 72.0 * coefficients_.row(6 * i + 3) * durations_(i) +
+                                      144.0 * coefficients_.row(6 * i + 4) * durations_squared_(i) +
+                                      240.0 * coefficients_.row(6 * i + 5) * durations_cubed_(i);
             }
             return;
         }
 
-        inline void solveAdjGradC(Eigen::MatrixXd &gdC) const
+        inline void SolveAdjointCoefficientGradient(Eigen::MatrixXd &coefficient_gradients) const
         {
-            A.solveAdj(gdC);
+            banded_system_.SolveAdjoint(coefficient_gradients);
             return;
         }
 
-        template <typename EIGENVEC>
-        inline void addPropCtoT(const Eigen::MatrixXd &adjGdC, EIGENVEC &gdT) const
+        template <typename EigenVectorType>
+        inline void AddCoefficientGradientToDurations(const Eigen::MatrixXd &adjoint_coefficient_gradients, EigenVectorType &duration_gradients) const
         {
-            Eigen::MatrixXd B1(6, 3), B2(3, 3);
+            Eigen::MatrixXd first_block(6, 3), second_block(3, 3);
 
-            Eigen::RowVector3d negVel, negAcc, negJer, negSnp, negCrk;
+            Eigen::RowVector3d negative_velocity, negative_acceleration, negative_jerk, negative_snap, negative_crackle;
 
-            for (int i = 0; i < N - 1; i++)
+            for (int i = 0; i < piece_count_ - 1; i++)
             {
-                negVel = -(b.row(i * 6 + 1) +
-                           2.0 * T1(i) * b.row(i * 6 + 2) +
-                           3.0 * T2(i) * b.row(i * 6 + 3) +
-                           4.0 * T3(i) * b.row(i * 6 + 4) +
-                           5.0 * T4(i) * b.row(i * 6 + 5));
-                negAcc = -(2.0 * b.row(i * 6 + 2) +
-                           6.0 * T1(i) * b.row(i * 6 + 3) +
-                           12.0 * T2(i) * b.row(i * 6 + 4) +
-                           20.0 * T3(i) * b.row(i * 6 + 5));
-                negJer = -(6.0 * b.row(i * 6 + 3) +
-                           24.0 * T1(i) * b.row(i * 6 + 4) +
-                           60.0 * T2(i) * b.row(i * 6 + 5));
-                negSnp = -(24.0 * b.row(i * 6 + 4) +
-                           120.0 * T1(i) * b.row(i * 6 + 5));
-                negCrk = -120.0 * b.row(i * 6 + 5);
+                negative_velocity = -(coefficients_.row(i * 6 + 1) +
+                           2.0 * durations_(i) * coefficients_.row(i * 6 + 2) +
+                           3.0 * durations_squared_(i) * coefficients_.row(i * 6 + 3) +
+                           4.0 * durations_cubed_(i) * coefficients_.row(i * 6 + 4) +
+                           5.0 * durations_fourth_(i) * coefficients_.row(i * 6 + 5));
+                negative_acceleration = -(2.0 * coefficients_.row(i * 6 + 2) +
+                           6.0 * durations_(i) * coefficients_.row(i * 6 + 3) +
+                           12.0 * durations_squared_(i) * coefficients_.row(i * 6 + 4) +
+                           20.0 * durations_cubed_(i) * coefficients_.row(i * 6 + 5));
+                negative_jerk = -(6.0 * coefficients_.row(i * 6 + 3) +
+                           24.0 * durations_(i) * coefficients_.row(i * 6 + 4) +
+                           60.0 * durations_squared_(i) * coefficients_.row(i * 6 + 5));
+                negative_snap = -(24.0 * coefficients_.row(i * 6 + 4) +
+                           120.0 * durations_(i) * coefficients_.row(i * 6 + 5));
+                negative_crackle = -120.0 * coefficients_.row(i * 6 + 5);
 
-                B1 << negSnp, negCrk, negVel, negVel, negAcc, negJer;
+                first_block << negative_snap, negative_crackle, negative_velocity, negative_velocity, negative_acceleration, negative_jerk;
 
-                gdT(i) += B1.cwiseProduct(adjGdC.block<6, 3>(6 * i + 3, 0)).sum();
+                duration_gradients(i) += first_block.cwiseProduct(adjoint_coefficient_gradients.block<6, 3>(6 * i + 3, 0)).sum();
             }
 
-            negVel = -(b.row(6 * N - 5) +
-                       2.0 * T1(N - 1) * b.row(6 * N - 4) +
-                       3.0 * T2(N - 1) * b.row(6 * N - 3) +
-                       4.0 * T3(N - 1) * b.row(6 * N - 2) +
-                       5.0 * T4(N - 1) * b.row(6 * N - 1));
-            negAcc = -(2.0 * b.row(6 * N - 4) +
-                       6.0 * T1(N - 1) * b.row(6 * N - 3) +
-                       12.0 * T2(N - 1) * b.row(6 * N - 2) +
-                       20.0 * T3(N - 1) * b.row(6 * N - 1));
-            negJer = -(6.0 * b.row(6 * N - 3) +
-                       24.0 * T1(N - 1) * b.row(6 * N - 2) +
-                       60.0 * T2(N - 1) * b.row(6 * N - 1));
+            negative_velocity = -(coefficients_.row(6 * piece_count_ - 5) +
+                       2.0 * durations_(piece_count_ - 1) * coefficients_.row(6 * piece_count_ - 4) +
+                       3.0 * durations_squared_(piece_count_ - 1) * coefficients_.row(6 * piece_count_ - 3) +
+                       4.0 * durations_cubed_(piece_count_ - 1) * coefficients_.row(6 * piece_count_ - 2) +
+                       5.0 * durations_fourth_(piece_count_ - 1) * coefficients_.row(6 * piece_count_ - 1));
+            negative_acceleration = -(2.0 * coefficients_.row(6 * piece_count_ - 4) +
+                       6.0 * durations_(piece_count_ - 1) * coefficients_.row(6 * piece_count_ - 3) +
+                       12.0 * durations_squared_(piece_count_ - 1) * coefficients_.row(6 * piece_count_ - 2) +
+                       20.0 * durations_cubed_(piece_count_ - 1) * coefficients_.row(6 * piece_count_ - 1));
+            negative_jerk = -(6.0 * coefficients_.row(6 * piece_count_ - 3) +
+                       24.0 * durations_(piece_count_ - 1) * coefficients_.row(6 * piece_count_ - 2) +
+                       60.0 * durations_squared_(piece_count_ - 1) * coefficients_.row(6 * piece_count_ - 1));
 
-            B2 << negVel, negAcc, negJer;
+            second_block << negative_velocity, negative_acceleration, negative_jerk;
 
-            gdT(N - 1) += B2.cwiseProduct(adjGdC.block<3, 3>(6 * N - 3, 0)).sum();
+            duration_gradients(piece_count_ - 1) += second_block.cwiseProduct(adjoint_coefficient_gradients.block<3, 3>(6 * piece_count_ - 3, 0)).sum();
 
             return;
         }
 
-        template <typename EIGENMAT>
-        inline void addPropCtoP(const Eigen::MatrixXd &adjGdC, EIGENMAT &gdInP) const
+        template <typename EigenMatrixType>
+        inline void AddCoefficientGradientToInnerPoints(const Eigen::MatrixXd &adjoint_coefficient_gradients, EigenMatrixType &inner_point_gradients) const
         {
-            for (int i = 0; i < N - 1; i++)
+            for (int i = 0; i < piece_count_ - 1; i++)
             {
-                // gdInP.col(i) += adjGdC.row(6 * i + 5).transpose();
-                gdInP.col(i) = adjGdC.row(6 * i + 5).transpose(); // zxzx
+                // inner_point_gradients.col(i) += adjoint_coefficient_gradients.row(6 * i + 5).transpose();
+                inner_point_gradients.col(i) = adjoint_coefficient_gradients.row(6 * i + 5).transpose(); // zxzx
             }
             return;
         }
 
-        template <typename EIGENVEC>
-        inline void addTimeIntPenalty(const Eigen::VectorXi cons,
-                                      const Eigen::VectorXi &idxHs,
-                                      const std::vector<Eigen::MatrixXd> &cfgHs,
-                                      const double vmax,
-                                      const double amax,
-                                      const Eigen::Vector3d ci,
+        template <typename EigenVectorType>
+        inline void AddTimeIntegralPenalty(const Eigen::VectorXi constraint_counts,
+                                      const Eigen::VectorXi &corridor_indices,
+                                      const std::vector<Eigen::MatrixXd> &corridor_configurations,
+                                      const double max_velocity,
+                                      const double max_acceleration,
+                                      const Eigen::Vector3d penalty_weights,
                                       double &cost,
-                                      EIGENVEC &gdT,
-                                      Eigen::MatrixXd &gdC) const
+                                      EigenVectorType &duration_gradients,
+                                      Eigen::MatrixXd &coefficient_gradients) const
         {
-            double pena = 0.0;
-            const double vmaxSqr = vmax * vmax;
-            const double amaxSqr = amax * amax;
+            double penalty = 0.0;
+            const double max_velocity_squared = max_velocity * max_velocity;
+            const double max_acceleration_squared = max_acceleration * max_acceleration;
 
-            Eigen::Vector3d pos, vel, acc, jer;
+            Eigen::Vector3d position, velocity, acceleration, jerk;
             double step, alpha;
-            double s1, s2, s3, s4, s5;
-            Eigen::Matrix<double, 6, 1> beta0, beta1, beta2, beta3;
-            Eigen::Vector3d outerNormal;
-            int K;
-            double violaPos, violaVel, violaAcc;
-            double violaPosPenaD, violaVelPenaD, violaAccPenaD;
-            double violaPosPena, violaVelPena, violaAccPena;
-            Eigen::Matrix<double, 6, 3> gradViolaVc, gradViolaAc;
-            double gradViolaVt, gradViolaAt;
-            double omg;
+            double time, time_squared, time_cubed, time_fourth, time_fifth;
+            Eigen::Matrix<double, 6, 1> position_basis, velocity_basis, acceleration_basis, jerk_basis;
+            Eigen::Vector3d outer_normal;
+            int plane_count;
+            double position_violation, velocity_violation, acceleration_violation;
+            double position_penalty_derivative, velocity_penalty_derivative, acceleration_penalty_derivative;
+            double position_penalty, velocity_penalty, acceleration_penalty;
+            Eigen::Matrix<double, 6, 3> velocity_coefficient_gradient, acceleration_coefficient_gradient;
+            double velocity_duration_gradient, acceleration_duration_gradient;
+            double integration_weight;
 
-            int innerLoop, idx;
-            for (int i = 0; i < N; i++)
+            int integration_point_count, corridor_index;
+            for (int i = 0; i < piece_count_; i++)
             {
-                const auto &c = b.block<6, 3>(i * 6, 0);
-                step = T1(i) / cons(i);
-                s1 = 0.0;
-                innerLoop = cons(i) + 1;
-                for (int j = 0; j < innerLoop; j++)
+                const auto &c = coefficients_.block<6, 3>(i * 6, 0);
+                step = durations_(i) / constraint_counts(i);
+                time = 0.0;
+                integration_point_count = constraint_counts(i) + 1;
+                for (int j = 0; j < integration_point_count; j++)
                 {
-                    s2 = s1 * s1;
-                    s3 = s2 * s1;
-                    s4 = s2 * s2;
-                    s5 = s4 * s1;
-                    beta0 << 1.0, s1, s2, s3, s4, s5;
-                    beta1 << 0.0, 1.0, 2.0 * s1, 3.0 * s2, 4.0 * s3, 5.0 * s4;
-                    beta2 << 0.0, 0.0, 2.0, 6.0 * s1, 12.0 * s2, 20.0 * s3;
-                    beta3 << 0.0, 0.0, 0.0, 6.0, 24.0 * s1, 60.0 * s2;
-                    alpha = 1.0 / cons(i) * j;
-                    pos = c.transpose() * beta0;
-                    vel = c.transpose() * beta1;
-                    acc = c.transpose() * beta2;
-                    jer = c.transpose() * beta3;
-                    violaVel = vel.squaredNorm() - vmaxSqr;
-                    violaAcc = acc.squaredNorm() - amaxSqr;
+                    time_squared = time * time;
+                    time_cubed = time_squared * time;
+                    time_fourth = time_squared * time_squared;
+                    time_fifth = time_fourth * time;
+                    position_basis << 1.0, time, time_squared, time_cubed, time_fourth, time_fifth;
+                    velocity_basis << 0.0, 1.0, 2.0 * time, 3.0 * time_squared, 4.0 * time_cubed, 5.0 * time_fourth;
+                    acceleration_basis << 0.0, 0.0, 2.0, 6.0 * time, 12.0 * time_squared, 20.0 * time_cubed;
+                    jerk_basis << 0.0, 0.0, 0.0, 6.0, 24.0 * time, 60.0 * time_squared;
+                    alpha = 1.0 / constraint_counts(i) * j;
+                    position = c.transpose() * position_basis;
+                    velocity = c.transpose() * velocity_basis;
+                    acceleration = c.transpose() * acceleration_basis;
+                    jerk = c.transpose() * jerk_basis;
+                    velocity_violation = velocity.squaredNorm() - max_velocity_squared;
+                    acceleration_violation = acceleration.squaredNorm() - max_acceleration_squared;
 
-                    omg = (j == 0 || j == innerLoop - 1) ? 0.5 : 1.0;
+                    integration_weight = (j == 0 || j == integration_point_count - 1) ? 0.5 : 1.0;
 
-                    idx = idxHs(i);
-                    K = cfgHs[idx].cols();
-                    for (int k = 0; k < K; k++)
+                    corridor_index = corridor_indices(i);
+                    plane_count = corridor_configurations[corridor_index].cols();
+                    for (int k = 0; k < plane_count; k++)
                     {
-                        outerNormal = cfgHs[idx].col(k).head<3>();
-                        violaPos = outerNormal.dot(pos - cfgHs[idx].col(k).tail<3>());
-                        if (violaPos > 0.0)
+                        outer_normal = corridor_configurations[corridor_index].col(k).head<3>();
+                        position_violation = outer_normal.dot(position - corridor_configurations[corridor_index].col(k).tail<3>());
+                        if (position_violation > 0.0)
                         {
-                            violaPosPenaD = violaPos * violaPos;
-                            violaPosPena = violaPosPenaD * violaPos;
-                            violaPosPenaD *= 3.0;
-                            gdC.block<6, 3>(i * 6, 0) += omg * step * ci(0) * violaPosPenaD * beta0 * outerNormal.transpose();
-                            gdT(i) += omg * (ci(0) * violaPosPenaD * alpha * outerNormal.dot(vel) * step +
-                                             ci(0) * violaPosPena / cons(i));
-                            pena += omg * step * ci(0) * violaPosPena;
+                            position_penalty_derivative = position_violation * position_violation;
+                            position_penalty = position_penalty_derivative * position_violation;
+                            position_penalty_derivative *= 3.0;
+                            coefficient_gradients.block<6, 3>(i * 6, 0) += integration_weight * step * penalty_weights(0) * position_penalty_derivative * position_basis * outer_normal.transpose();
+                            duration_gradients(i) += integration_weight * (penalty_weights(0) * position_penalty_derivative * alpha * outer_normal.dot(velocity) * step +
+                                             penalty_weights(0) * position_penalty / constraint_counts(i));
+                            penalty += integration_weight * step * penalty_weights(0) * position_penalty;
                         }
                     }
 
-                    if (violaVel > 0.0)
+                    if (velocity_violation > 0.0)
                     {
-                        violaVelPenaD = violaVel * violaVel;
-                        violaVelPena = violaVelPenaD * violaVel;
-                        violaVelPenaD *= 3.0;
-                        gradViolaVc = 2.0 * beta1 * vel.transpose();
-                        gradViolaVt = 2.0 * alpha * vel.transpose() * acc;
-                        gdC.block<6, 3>(i * 6, 0) += omg * step * ci(1) * violaVelPenaD * gradViolaVc;
-                        gdT(i) += omg * (ci(1) * violaVelPenaD * gradViolaVt * step +
-                                         ci(1) * violaVelPena / cons(i));
-                        pena += omg * step * ci(1) * violaVelPena;
+                        velocity_penalty_derivative = velocity_violation * velocity_violation;
+                        velocity_penalty = velocity_penalty_derivative * velocity_violation;
+                        velocity_penalty_derivative *= 3.0;
+                        velocity_coefficient_gradient = 2.0 * velocity_basis * velocity.transpose();
+                        velocity_duration_gradient = 2.0 * alpha * velocity.transpose() * acceleration;
+                        coefficient_gradients.block<6, 3>(i * 6, 0) += integration_weight * step * penalty_weights(1) * velocity_penalty_derivative * velocity_coefficient_gradient;
+                        duration_gradients(i) += integration_weight * (penalty_weights(1) * velocity_penalty_derivative * velocity_duration_gradient * step +
+                                         penalty_weights(1) * velocity_penalty / constraint_counts(i));
+                        penalty += integration_weight * step * penalty_weights(1) * velocity_penalty;
                     }
 
-                    if (violaAcc > 0.0)
+                    if (acceleration_violation > 0.0)
                     {
-                        violaAccPenaD = violaAcc * violaAcc;
-                        violaAccPena = violaAccPenaD * violaAcc;
-                        violaAccPenaD *= 3.0;
-                        gradViolaAc = 2.0 * beta2 * acc.transpose();
-                        gradViolaAt = 2.0 * alpha * acc.transpose() * jer;
-                        gdC.block<6, 3>(i * 6, 0) += omg * step * ci(2) * violaAccPenaD * gradViolaAc;
-                        gdT(i) += omg * (ci(2) * violaAccPenaD * gradViolaAt * step +
-                                         ci(2) * violaAccPena / cons(i));
-                        pena += omg * step * ci(2) * violaAccPena;
+                        acceleration_penalty_derivative = acceleration_violation * acceleration_violation;
+                        acceleration_penalty = acceleration_penalty_derivative * acceleration_violation;
+                        acceleration_penalty_derivative *= 3.0;
+                        acceleration_coefficient_gradient = 2.0 * acceleration_basis * acceleration.transpose();
+                        acceleration_duration_gradient = 2.0 * alpha * acceleration.transpose() * jerk;
+                        coefficient_gradients.block<6, 3>(i * 6, 0) += integration_weight * step * penalty_weights(2) * acceleration_penalty_derivative * acceleration_coefficient_gradient;
+                        duration_gradients(i) += integration_weight * (penalty_weights(2) * acceleration_penalty_derivative * acceleration_duration_gradient * step +
+                                         penalty_weights(2) * acceleration_penalty / constraint_counts(i));
+                        penalty += integration_weight * step * penalty_weights(2) * acceleration_penalty;
                     }
 
-                    s1 += step;
+                    time += step;
                 }
             }
 
-            cost += pena;
+            cost += penalty;
             return;
         }
 
     public:
-        inline void reset(const Eigen::Matrix3d &headState,
-                          const Eigen::Matrix3d &tailState,
-                          const int &pieceNum)
+        inline void Reset(const Eigen::Matrix3d &head_state,
+                          const Eigen::Matrix3d &tail_state,
+                          const int &piece_count)
         {
-            N = pieceNum;
-            headPVA = headState;
-            tailPVA = tailState;
-            T1.resize(N);
-            A.create(6 * N, 6, 6);
-            b.resize(6 * N, 3);
-            gdC.resize(6 * N, 3);
-            // gdT.resize(6 * N);
+            piece_count_ = piece_count;
+            head_state_ = head_state;
+            tail_state_ = tail_state;
+            durations_.resize(piece_count_);
+            banded_system_.Create(6 * piece_count_, 6, 6);
+            coefficients_.resize(6 * piece_count_, 3);
+            coefficient_gradients_.resize(6 * piece_count_, 3);
+            // duration_gradients.resize(6 * piece_count_);
             return;
         }
 
-        inline void generate(const Eigen::MatrixXd &inPs,
-                             const Eigen::VectorXd &ts)
+        inline void Generate(const Eigen::MatrixXd &inner_points,
+                             const Eigen::VectorXd &durations)
         {
-            if (inPs.cols() == 0)
+            if (inner_points.cols() == 0)
             {
 
-                T1(0) = ts(0);
-                double t1_inv = 1.0 / T1(0);
+                durations_(0) = durations(0);
+                double t1_inv = 1.0 / durations_(0);
                 double t2_inv = t1_inv * t1_inv;
                 double t3_inv = t2_inv * t1_inv;
                 double t4_inv = t2_inv * t2_inv;
                 double t5_inv = t4_inv * t1_inv;
-                CoefficientMat coeffMatReversed;
-                coeffMatReversed.col(5) = 0.5 * (tailPVA.col(2) - headPVA.col(2)) * t3_inv -
-                                          3.0 * (headPVA.col(1) + tailPVA.col(1)) * t4_inv +
-                                          6.0 * (tailPVA.col(0) - headPVA.col(0)) * t5_inv;
-                coeffMatReversed.col(4) = (-tailPVA.col(2) + 1.5 * headPVA.col(2)) * t2_inv +
-                                          (8.0 * headPVA.col(1) + 7.0 * tailPVA.col(1)) * t3_inv +
-                                          15.0 * (-tailPVA.col(0) + headPVA.col(0)) * t4_inv;
-                coeffMatReversed.col(3) = (0.5 * tailPVA.col(2) - 1.5 * headPVA.col(2)) * t1_inv -
-                                          (6.0 * headPVA.col(1) + 4.0 * tailPVA.col(1)) * t2_inv +
-                                          10.0 * (tailPVA.col(0) - headPVA.col(0)) * t3_inv;
-                coeffMatReversed.col(2) = 0.5 * headPVA.col(2);
-                coeffMatReversed.col(1) = headPVA.col(1);
-                coeffMatReversed.col(0) = headPVA.col(0);
-                b = coeffMatReversed.transpose();
+                CoefficientMatrix reversed_coefficients;
+                reversed_coefficients.col(5) = 0.5 * (tail_state_.col(2) - head_state_.col(2)) * t3_inv -
+                                          3.0 * (head_state_.col(1) + tail_state_.col(1)) * t4_inv +
+                                          6.0 * (tail_state_.col(0) - head_state_.col(0)) * t5_inv;
+                reversed_coefficients.col(4) = (-tail_state_.col(2) + 1.5 * head_state_.col(2)) * t2_inv +
+                                          (8.0 * head_state_.col(1) + 7.0 * tail_state_.col(1)) * t3_inv +
+                                          15.0 * (-tail_state_.col(0) + head_state_.col(0)) * t4_inv;
+                reversed_coefficients.col(3) = (0.5 * tail_state_.col(2) - 1.5 * head_state_.col(2)) * t1_inv -
+                                          (6.0 * head_state_.col(1) + 4.0 * tail_state_.col(1)) * t2_inv +
+                                          10.0 * (tail_state_.col(0) - head_state_.col(0)) * t3_inv;
+                reversed_coefficients.col(2) = 0.5 * head_state_.col(2);
+                reversed_coefficients.col(1) = head_state_.col(1);
+                reversed_coefficients.col(0) = head_state_.col(0);
+                coefficients_ = reversed_coefficients.transpose();
             }
             else
             {
-                T1 = ts;
-                T2 = T1.cwiseProduct(T1);
-                T3 = T2.cwiseProduct(T1);
-                T4 = T2.cwiseProduct(T2);
-                T5 = T4.cwiseProduct(T1);
+                durations_ = durations;
+                durations_squared_ = durations_.cwiseProduct(durations_);
+                durations_cubed_ = durations_squared_.cwiseProduct(durations_);
+                durations_fourth_ = durations_squared_.cwiseProduct(durations_squared_);
+                durations_fifth_ = durations_fourth_.cwiseProduct(durations_);
 
-                A.reset();
-                b.setZero();
+                banded_system_.Reset();
+                coefficients_.setZero();
 
-                A(0, 0) = 1.0;
-                A(1, 1) = 1.0;
-                A(2, 2) = 2.0;
-                b.row(0) = headPVA.col(0).transpose();
-                b.row(1) = headPVA.col(1).transpose();
-                b.row(2) = headPVA.col(2).transpose();
+                banded_system_(0, 0) = 1.0;
+                banded_system_(1, 1) = 1.0;
+                banded_system_(2, 2) = 2.0;
+                coefficients_.row(0) = head_state_.col(0).transpose();
+                coefficients_.row(1) = head_state_.col(1).transpose();
+                coefficients_.row(2) = head_state_.col(2).transpose();
 
-                for (int i = 0; i < N - 1; i++)
+                for (int i = 0; i < piece_count_ - 1; i++)
                 {
-                    A(6 * i + 3, 6 * i + 3) = 6.0;
-                    A(6 * i + 3, 6 * i + 4) = 24.0 * T1(i);
-                    A(6 * i + 3, 6 * i + 5) = 60.0 * T2(i);
-                    A(6 * i + 3, 6 * i + 9) = -6.0;
-                    A(6 * i + 4, 6 * i + 4) = 24.0;
-                    A(6 * i + 4, 6 * i + 5) = 120.0 * T1(i);
-                    A(6 * i + 4, 6 * i + 10) = -24.0;
-                    A(6 * i + 5, 6 * i) = 1.0;
-                    A(6 * i + 5, 6 * i + 1) = T1(i);
-                    A(6 * i + 5, 6 * i + 2) = T2(i);
-                    A(6 * i + 5, 6 * i + 3) = T3(i);
-                    A(6 * i + 5, 6 * i + 4) = T4(i);
-                    A(6 * i + 5, 6 * i + 5) = T5(i);
-                    A(6 * i + 6, 6 * i) = 1.0;
-                    A(6 * i + 6, 6 * i + 1) = T1(i);
-                    A(6 * i + 6, 6 * i + 2) = T2(i);
-                    A(6 * i + 6, 6 * i + 3) = T3(i);
-                    A(6 * i + 6, 6 * i + 4) = T4(i);
-                    A(6 * i + 6, 6 * i + 5) = T5(i);
-                    A(6 * i + 6, 6 * i + 6) = -1.0;
-                    A(6 * i + 7, 6 * i + 1) = 1.0;
-                    A(6 * i + 7, 6 * i + 2) = 2 * T1(i);
-                    A(6 * i + 7, 6 * i + 3) = 3 * T2(i);
-                    A(6 * i + 7, 6 * i + 4) = 4 * T3(i);
-                    A(6 * i + 7, 6 * i + 5) = 5 * T4(i);
-                    A(6 * i + 7, 6 * i + 7) = -1.0;
-                    A(6 * i + 8, 6 * i + 2) = 2.0;
-                    A(6 * i + 8, 6 * i + 3) = 6 * T1(i);
-                    A(6 * i + 8, 6 * i + 4) = 12 * T2(i);
-                    A(6 * i + 8, 6 * i + 5) = 20 * T3(i);
-                    A(6 * i + 8, 6 * i + 8) = -2.0;
+                    banded_system_(6 * i + 3, 6 * i + 3) = 6.0;
+                    banded_system_(6 * i + 3, 6 * i + 4) = 24.0 * durations_(i);
+                    banded_system_(6 * i + 3, 6 * i + 5) = 60.0 * durations_squared_(i);
+                    banded_system_(6 * i + 3, 6 * i + 9) = -6.0;
+                    banded_system_(6 * i + 4, 6 * i + 4) = 24.0;
+                    banded_system_(6 * i + 4, 6 * i + 5) = 120.0 * durations_(i);
+                    banded_system_(6 * i + 4, 6 * i + 10) = -24.0;
+                    banded_system_(6 * i + 5, 6 * i) = 1.0;
+                    banded_system_(6 * i + 5, 6 * i + 1) = durations_(i);
+                    banded_system_(6 * i + 5, 6 * i + 2) = durations_squared_(i);
+                    banded_system_(6 * i + 5, 6 * i + 3) = durations_cubed_(i);
+                    banded_system_(6 * i + 5, 6 * i + 4) = durations_fourth_(i);
+                    banded_system_(6 * i + 5, 6 * i + 5) = durations_fifth_(i);
+                    banded_system_(6 * i + 6, 6 * i) = 1.0;
+                    banded_system_(6 * i + 6, 6 * i + 1) = durations_(i);
+                    banded_system_(6 * i + 6, 6 * i + 2) = durations_squared_(i);
+                    banded_system_(6 * i + 6, 6 * i + 3) = durations_cubed_(i);
+                    banded_system_(6 * i + 6, 6 * i + 4) = durations_fourth_(i);
+                    banded_system_(6 * i + 6, 6 * i + 5) = durations_fifth_(i);
+                    banded_system_(6 * i + 6, 6 * i + 6) = -1.0;
+                    banded_system_(6 * i + 7, 6 * i + 1) = 1.0;
+                    banded_system_(6 * i + 7, 6 * i + 2) = 2 * durations_(i);
+                    banded_system_(6 * i + 7, 6 * i + 3) = 3 * durations_squared_(i);
+                    banded_system_(6 * i + 7, 6 * i + 4) = 4 * durations_cubed_(i);
+                    banded_system_(6 * i + 7, 6 * i + 5) = 5 * durations_fourth_(i);
+                    banded_system_(6 * i + 7, 6 * i + 7) = -1.0;
+                    banded_system_(6 * i + 8, 6 * i + 2) = 2.0;
+                    banded_system_(6 * i + 8, 6 * i + 3) = 6 * durations_(i);
+                    banded_system_(6 * i + 8, 6 * i + 4) = 12 * durations_squared_(i);
+                    banded_system_(6 * i + 8, 6 * i + 5) = 20 * durations_cubed_(i);
+                    banded_system_(6 * i + 8, 6 * i + 8) = -2.0;
 
-                    b.row(6 * i + 5) = inPs.col(i).transpose();
+                    coefficients_.row(6 * i + 5) = inner_points.col(i).transpose();
                 }
 
-                A(6 * N - 3, 6 * N - 6) = 1.0;
-                A(6 * N - 3, 6 * N - 5) = T1(N - 1);
-                A(6 * N - 3, 6 * N - 4) = T2(N - 1);
-                A(6 * N - 3, 6 * N - 3) = T3(N - 1);
-                A(6 * N - 3, 6 * N - 2) = T4(N - 1);
-                A(6 * N - 3, 6 * N - 1) = T5(N - 1);
-                A(6 * N - 2, 6 * N - 5) = 1.0;
-                A(6 * N - 2, 6 * N - 4) = 2 * T1(N - 1);
-                A(6 * N - 2, 6 * N - 3) = 3 * T2(N - 1);
-                A(6 * N - 2, 6 * N - 2) = 4 * T3(N - 1);
-                A(6 * N - 2, 6 * N - 1) = 5 * T4(N - 1);
-                A(6 * N - 1, 6 * N - 4) = 2;
-                A(6 * N - 1, 6 * N - 3) = 6 * T1(N - 1);
-                A(6 * N - 1, 6 * N - 2) = 12 * T2(N - 1);
-                A(6 * N - 1, 6 * N - 1) = 20 * T3(N - 1);
+                banded_system_(6 * piece_count_ - 3, 6 * piece_count_ - 6) = 1.0;
+                banded_system_(6 * piece_count_ - 3, 6 * piece_count_ - 5) = durations_(piece_count_ - 1);
+                banded_system_(6 * piece_count_ - 3, 6 * piece_count_ - 4) = durations_squared_(piece_count_ - 1);
+                banded_system_(6 * piece_count_ - 3, 6 * piece_count_ - 3) = durations_cubed_(piece_count_ - 1);
+                banded_system_(6 * piece_count_ - 3, 6 * piece_count_ - 2) = durations_fourth_(piece_count_ - 1);
+                banded_system_(6 * piece_count_ - 3, 6 * piece_count_ - 1) = durations_fifth_(piece_count_ - 1);
+                banded_system_(6 * piece_count_ - 2, 6 * piece_count_ - 5) = 1.0;
+                banded_system_(6 * piece_count_ - 2, 6 * piece_count_ - 4) = 2 * durations_(piece_count_ - 1);
+                banded_system_(6 * piece_count_ - 2, 6 * piece_count_ - 3) = 3 * durations_squared_(piece_count_ - 1);
+                banded_system_(6 * piece_count_ - 2, 6 * piece_count_ - 2) = 4 * durations_cubed_(piece_count_ - 1);
+                banded_system_(6 * piece_count_ - 2, 6 * piece_count_ - 1) = 5 * durations_fourth_(piece_count_ - 1);
+                banded_system_(6 * piece_count_ - 1, 6 * piece_count_ - 4) = 2;
+                banded_system_(6 * piece_count_ - 1, 6 * piece_count_ - 3) = 6 * durations_(piece_count_ - 1);
+                banded_system_(6 * piece_count_ - 1, 6 * piece_count_ - 2) = 12 * durations_squared_(piece_count_ - 1);
+                banded_system_(6 * piece_count_ - 1, 6 * piece_count_ - 1) = 20 * durations_cubed_(piece_count_ - 1);
 
-                b.row(6 * N - 3) = tailPVA.col(0).transpose();
-                b.row(6 * N - 2) = tailPVA.col(1).transpose();
-                b.row(6 * N - 1) = tailPVA.col(2).transpose();
+                coefficients_.row(6 * piece_count_ - 3) = tail_state_.col(0).transpose();
+                coefficients_.row(6 * piece_count_ - 2) = tail_state_.col(1).transpose();
+                coefficients_.row(6 * piece_count_ - 1) = tail_state_.col(2).transpose();
 
-                A.factorizeLU();
-                A.solve(b);
+                banded_system_.FactorizeLu();
+                banded_system_.Solve(coefficients_);
 
                 return;
             }
         }
 
-        inline const Eigen::MatrixXd &get_b() const
+        inline const Eigen::MatrixXd &GetCoefficients() const
         {
-            return b;
+            return coefficients_;
         }
 
-        inline const Eigen::VectorXd &get_T1() const
+        inline const Eigen::VectorXd &GetDurations() const
         {
-            return T1;
+            return durations_;
         }
 
-        inline Eigen::MatrixXd &get_gdC()
+        inline Eigen::MatrixXd &GetCoefficientGradients()
         {
-            return gdC;
+            return coefficient_gradients_;
         }
 
-        // inline Eigen::MatrixXd get_gdT() const
+        // inline Eigen::MatrixXd GetDurationGradients() const
         // {
-        //     return gdT;
+        //     return duration_gradients;
         // }
 
-        // inline Eigen::MatrixXd get_gdT(size_t i) const
+        // inline Eigen::MatrixXd GetDurationGradient(size_t i) const
         // {
-        //     return gdT(i);
+        //     return duration_gradients(i);
         // }
 
-        inline double getTrajJerkCost() const
+        inline double GetTrajectoryJerkCost() const
         {
             double objective = 0.0;
-            for (int i = 0; i < N; i++)
+            for (int i = 0; i < piece_count_; i++)
             {
-                objective += 36.0 * b.row(6 * i + 3).squaredNorm() * T1(i) +
-                             144.0 * b.row(6 * i + 4).dot(b.row(6 * i + 3)) * T2(i) +
-                             192.0 * b.row(6 * i + 4).squaredNorm() * T3(i) +
-                             240.0 * b.row(6 * i + 5).dot(b.row(6 * i + 3)) * T3(i) +
-                             720.0 * b.row(6 * i + 5).dot(b.row(6 * i + 4)) * T4(i) +
-                             720.0 * b.row(6 * i + 5).squaredNorm() * T5(i);
+                objective += 36.0 * coefficients_.row(6 * i + 3).squaredNorm() * durations_(i) +
+                             144.0 * coefficients_.row(6 * i + 4).dot(coefficients_.row(6 * i + 3)) * durations_squared_(i) +
+                             192.0 * coefficients_.row(6 * i + 4).squaredNorm() * durations_cubed_(i) +
+                             240.0 * coefficients_.row(6 * i + 5).dot(coefficients_.row(6 * i + 3)) * durations_cubed_(i) +
+                             720.0 * coefficients_.row(6 * i + 5).dot(coefficients_.row(6 * i + 4)) * durations_fourth_(i) +
+                             720.0 * coefficients_.row(6 * i + 5).squaredNorm() * durations_fifth_(i);
             }
             return objective;
         }
 
-        inline Trajectory getTraj(void) const
+        inline Trajectory GetTrajectory(void) const
         {
             Trajectory traj;
-            traj.reserve(N);
-            for (int i = 0; i < N; i++)
+            traj.Reserve(piece_count_);
+            for (int i = 0; i < piece_count_; i++)
             {
-                traj.emplace_back(T1(i), b.block<6, 3>(6 * i, 0).transpose().rowwise().reverse());
+                traj.EmplaceBack(durations_(i), coefficients_.block<6, 3>(6 * i, 0).transpose().rowwise().reverse());
             }
             return traj;
         }
 
-        inline Eigen::MatrixXd getInitConstraintPoints(const int K) const
+        inline Eigen::MatrixXd GetInitialConstraintPoints(const int samples_per_piece) const
         {
-            Eigen::MatrixXd pts(3, N * K + 1);
-            Eigen::Vector3d pos;
-            Eigen::Matrix<double, 6, 1> beta0;
-            double s1, s2, s3, s4, s5;
+            Eigen::MatrixXd pts(3, piece_count_ * samples_per_piece + 1);
+            Eigen::Vector3d position;
+            Eigen::Matrix<double, 6, 1> position_basis;
+            double time, time_squared, time_cubed, time_fourth, time_fifth;
             double step;
-            int i_dp = 0;
+            int point_index = 0;
 
-            for (int i = 0; i < N; ++i)
+            for (int i = 0; i < piece_count_; ++i)
             {
-                const auto &c = b.block<6, 3>(i * 6, 0);
-                step = T1(i) / K;
-                s1 = 0.0;
+                const auto &c = coefficients_.block<6, 3>(i * 6, 0);
+                step = durations_(i) / samples_per_piece;
+                time = 0.0;
                 double t = 0;
-                // innerLoop = K;
+                // integration_point_count = samples_per_piece;
 
-                for (int j = 0; j <= K; ++j)
+                for (int j = 0; j <= samples_per_piece; ++j)
                 {
-                    s2 = s1 * s1;
-                    s3 = s2 * s1;
-                    s4 = s2 * s2;
-                    s5 = s4 * s1;
-                    beta0 << 1.0, s1, s2, s3, s4, s5;
-                    pos = c.transpose() * beta0;
-                    pts.col(i_dp) = pos;
+                    time_squared = time * time;
+                    time_cubed = time_squared * time;
+                    time_fourth = time_squared * time_squared;
+                    time_fifth = time_fourth * time;
+                    position_basis << 1.0, time, time_squared, time_cubed, time_fourth, time_fifth;
+                    position = c.transpose() * position_basis;
+                    pts.col(point_index) = position;
 
-                    s1 += step;
-                    if (j != K || (j == K && i == N - 1))
+                    time += step;
+                    if (j != samples_per_piece || (j == samples_per_piece && i == piece_count_ - 1))
                     {
-                        ++i_dp;
+                        ++point_index;
                     }
                 }
             }
@@ -1344,55 +1343,57 @@ namespace poly_traj
             return pts;
         }
 
-        template <typename EIGENVEC, typename EIGENMAT>
-        inline void getGrad2TP(EIGENVEC &gdT,
-                               EIGENMAT &gdInPs)
+        template <typename EigenVectorType, typename EigenMatrixType>
+        inline void GetGradientsToTimeAndPoints(EigenVectorType &duration_gradients,
+                               EigenMatrixType &inner_point_gradients)
         {
-            solveAdjGradC(gdC);
-            addPropCtoT(gdC, gdT);
-            addPropCtoP(gdC, gdInPs);
+            SolveAdjointCoefficientGradient(coefficient_gradients_);
+            AddCoefficientGradientToDurations(coefficient_gradients_, duration_gradients);
+            AddCoefficientGradientToInnerPoints(coefficient_gradients_, inner_point_gradients);
         }
 
-        template <typename EIGENVEC>
-        inline void initGradCost(EIGENVEC &gdT,
+        template <typename EigenVectorType>
+        inline void InitializeGradientCost(EigenVectorType &duration_gradients,
                                  double &cost)
         {
-            // printf( "gdInPs=%d\n", gdInPs.size() );
+            // printf( "inner_point_gradients=%d\n", inner_point_gradients.size() );
 
-            gdT.setZero();
-            gdC.setZero();
-            cost = getTrajJerkCost();
-            addGradJbyT(gdT);
-            addGradJbyC(gdC);
+            duration_gradients.setZero();
+            coefficient_gradients_.setZero();
+            cost = GetTrajectoryJerkCost();
+            AddJerkGradientToDurations(duration_gradients);
+            AddJerkGradientToCoefficients(coefficient_gradients_);
         }
 
-        template <typename EIGENVEC, typename EIGENMAT>
-        inline void evalTrajCostGrad(const Eigen::VectorXi &cons,
-                                     const Eigen::VectorXi &idxHs,
-                                     const std::vector<Eigen::MatrixXd> &cfgHs,
-                                     const double &vmax,
-                                     const double &amax,
-                                     const Eigen::Vector3d &ci,
+        template <typename EigenVectorType, typename EigenMatrixType>
+        inline void EvaluateTrajectoryCostGradient(const Eigen::VectorXi &constraint_counts,
+                                     const Eigen::VectorXi &corridor_indices,
+                                     const std::vector<Eigen::MatrixXd> &corridor_configurations,
+                                     const double &max_velocity,
+                                     const double &max_acceleration,
+                                     const Eigen::Vector3d &penalty_weights,
                                      double &cost,
-                                     EIGENVEC &gdT,
-                                     EIGENMAT &gdInPs)
+                                     EigenVectorType &duration_gradients,
+                                     EigenMatrixType &inner_point_gradients)
         {
-            gdT.setZero();
-            gdInPs.setZero();
-            gdC.setZero();
+            duration_gradients.setZero();
+            inner_point_gradients.setZero();
+            coefficient_gradients_.setZero();
 
-            cost = getTrajJerkCost();
-            addGradJbyT(gdT);
-            addGradJbyC(gdC);
+            cost = GetTrajectoryJerkCost();
+            AddJerkGradientToDurations(duration_gradients);
+            AddJerkGradientToCoefficients(coefficient_gradients_);
 
-            addTimeIntPenalty(cons, idxHs, cfgHs, vmax, amax, ci, cost, gdT, gdC);
+            AddTimeIntegralPenalty(constraint_counts, corridor_indices, corridor_configurations,
+                                   max_velocity, max_acceleration, penalty_weights, cost,
+                                   duration_gradients, coefficient_gradients_);
 
-            solveAdjGradC(gdC);
-            addPropCtoT(gdC, gdT);
-            addPropCtoP(gdC, gdInPs);
+            SolveAdjointCoefficientGradient(coefficient_gradients_);
+            AddCoefficientGradientToDurations(coefficient_gradients_, duration_gradients);
+            AddCoefficientGradientToInnerPoints(coefficient_gradients_, inner_point_gradients);
         }
 
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
     };
 
-} //namespace poly_traj
+}  // namespace poly_traj

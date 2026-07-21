@@ -111,16 +111,16 @@ poly_traj::Trajectory predict_traj(const double acc, const double dir, const Eig
   auto tail_pv = obstacle.predict(acc, dir, PRED_TIME);
   tailState << Eigen::Vector3d(tail_pv.first(0), tail_pv.first(1), p(2)), Eigen::Vector3d(tail_pv.second(0), tail_pv.second(1), v(2)), Eigen::Vector3d::Zero();
   vis_pts.push_back(tailState.col(0));
-  predicted_traj.reset(headState, tailState, SEG_NUM);
-  predicted_traj.generate(innerPts, ts);
-  return predicted_traj.getTraj();
+  predicted_traj.Reset(headState, tailState, SEG_NUM);
+  predicted_traj.Generate(innerPts, ts);
+  return predicted_traj.GetTrajectory();
 }
 
 void Traj2ROSMsg(const poly_traj::Trajectory &traj, const double des_clear, const int obstacle_id, traj_utils::MINCOTraj &MINCO_msg)
 {
 
-  Eigen::VectorXd durs = traj.getDurations();
-  int piece_num = traj.getPieceNum();
+  Eigen::VectorXd durs = traj.GetDurations();
+  int piece_num = traj.GetPieceCount();
   double duration = durs.sum();
 
   MINCO_msg.drone_id = obstacle_id;
@@ -130,22 +130,22 @@ void Traj2ROSMsg(const poly_traj::Trajectory &traj, const double des_clear, cons
   MINCO_msg.duration.resize(piece_num);
   MINCO_msg.des_clearance = des_clear;
   Eigen::Vector3d vec;
-  vec = traj.getPos(0);
+  vec = traj.GetPosition(0);
   MINCO_msg.start_p[0] = vec(0), MINCO_msg.start_p[1] = vec(1), MINCO_msg.start_p[2] = vec(2);
-  vec = traj.getVel(0);
+  vec = traj.GetVelocity(0);
   MINCO_msg.start_v[0] = vec(0), MINCO_msg.start_v[1] = vec(1), MINCO_msg.start_v[2] = vec(2);
-  vec = traj.getAcc(0);
+  vec = traj.GetAcceleration(0);
   MINCO_msg.start_a[0] = vec(0), MINCO_msg.start_a[1] = vec(1), MINCO_msg.start_a[2] = vec(2);
-  vec = traj.getPos(duration);
+  vec = traj.GetPosition(duration);
   MINCO_msg.end_p[0] = vec(0), MINCO_msg.end_p[1] = vec(1), MINCO_msg.end_p[2] = vec(2);
-  vec = traj.getVel(duration);
+  vec = traj.GetVelocity(duration);
   MINCO_msg.end_v[0] = vec(0), MINCO_msg.end_v[1] = vec(1), MINCO_msg.end_v[2] = vec(2);
-  vec = traj.getAcc(duration);
+  vec = traj.GetAcceleration(duration);
   MINCO_msg.end_a[0] = vec(0), MINCO_msg.end_a[1] = vec(1), MINCO_msg.end_a[2] = vec(2);
   MINCO_msg.inner_x.resize(piece_num - 1);
   MINCO_msg.inner_y.resize(piece_num - 1);
   MINCO_msg.inner_z.resize(piece_num - 1);
-  Eigen::MatrixXd pos = traj.getPositions();
+  Eigen::MatrixXd pos = traj.GetPositions();
   for (int i = 0; i < piece_num - 1; i++)
   {
     MINCO_msg.inner_x[i] = pos(0, i + 1);

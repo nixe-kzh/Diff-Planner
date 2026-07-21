@@ -63,7 +63,7 @@ void polyTrajCallback(traj_utils::PolyTrajPtr msg)
 
   int piece_nums = msg->duration.size();
   std::vector<double> dura(piece_nums);
-  std::vector<poly_traj::CoefficientMat> cMats(piece_nums);
+  std::vector<poly_traj::CoefficientMatrix> cMats(piece_nums);
   for (int i = 0; i < piece_nums; ++i)
   {
     int i6 = i * 6;
@@ -80,7 +80,7 @@ void polyTrajCallback(traj_utils::PolyTrajPtr msg)
   traj_.reset(new poly_traj::Trajectory(dura, cMats));
 
   start_time_ = msg->start_time;
-  traj_duration_ = traj_->getTotalDuration();
+  traj_duration_ = traj_->GetTotalDuration();
   traj_id_ = msg->traj_id;
 
   receive_traj_ = true;
@@ -91,8 +91,8 @@ std::pair<double, double> calculate_yaw(double t_cur, Eigen::Vector3d &pos, doub
   std::pair<double, double> yaw_yawdot(0, 0);
 
   Eigen::Vector3d dir = t_cur + time_forward_ <= traj_duration_
-                            ? traj_->getPos(t_cur + time_forward_) - pos
-                            : traj_->getPos(traj_duration_) - pos;
+                            ? traj_->GetPosition(t_cur + time_forward_) - pos
+                            : traj_->GetPosition(traj_duration_) - pos;
   double yaw_temp = dir.norm() > 0.1
                         ? atan2(dir(1), dir(0))
                         : last_yaw_;
@@ -215,10 +215,10 @@ void cmdCallback(const ros::TimerEvent &e)
 #endif
   if (t_cur < traj_duration_ && t_cur >= 0.0)
   {
-    pos = traj_->getPos(t_cur);
-    vel = traj_->getVel(t_cur);
-    acc = traj_->getAcc(t_cur);
-    jer = traj_->getJer(t_cur);
+    pos = traj_->GetPosition(t_cur);
+    vel = traj_->GetVelocity(t_cur);
+    acc = traj_->GetAcceleration(t_cur);
+    jer = traj_->GetJerk(t_cur);
 
     /*** calculate yaw ***/
     yaw_yawdot = calculate_yaw(t_cur, pos, 0.01);
@@ -250,7 +250,7 @@ void cmdCallback(const ros::TimerEvent &e)
       return;
 
     /* hover when finished traj_ */
-    pos = traj_->getPos(traj_duration_);
+    pos = traj_->GetPosition(traj_duration_);
     vel.setZero();
     acc.setZero();
     jer.setZero();
@@ -288,7 +288,7 @@ void cmdCallback(const ros::TimerEvent &e)
       return;
 
     /* hover when finished traj_ */
-    pos = traj_->getPos(traj_duration_);
+    pos = traj_->GetPosition(traj_duration_);
     vel.setZero();
     acc.setZero();
     jer.setZero();
