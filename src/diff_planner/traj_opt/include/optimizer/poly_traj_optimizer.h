@@ -68,9 +68,9 @@ namespace diff_planner
     GridMap::Ptr grid_map_;
     AStar::Ptr a_star_;
     poly_traj::MinJerkOpt jerkOpt_;
-    SwarmTrajData *swarm_trajs_{NULL}; // Can not use shared_ptr and no need to free
+    SwarmTrajectoryData *swarm_trajs_{NULL}; // Can not use shared_ptr and no need to free
     ConstraintPoints cps_;
-    // PtsChk_t pts_check_;
+    // PointsToCheck pts_check_;
 
     int drone_id_;
     int cps_num_prePiece_;   // number of distinctive constraint points each piece
@@ -118,7 +118,7 @@ namespace diff_planner
     void setParam(ros::NodeHandle &nh);
     void setEnvironment(const GridMap::Ptr &map);
     void setControlPoints(const Eigen::MatrixXd &points);
-    void setSwarmTrajs(SwarmTrajData *swarm_trajs_ptr);
+    void setSwarmTrajs(SwarmTrajectoryData *swarm_trajs_ptr);
     void setDroneId(const int drone_id);
     void setIfTouchGoal(const bool touch_goal);
     void setConstraintPoints(ConstraintPoints cps);
@@ -135,7 +135,7 @@ namespace diff_planner
                             const Eigen::MatrixXd &initInnerPts, const Eigen::VectorXd &initT,
                             double &final_cost);
 
-    bool computePointsToCheck(poly_traj::Trajectory &traj, int id_end, PtsChk_t &pts_check);
+    bool computePointsToCheck(poly_traj::Trajectory &traj, int id_end, PointsToCheck &pts_check);
 
     bool checkDynamicFeasibility(const poly_traj::MinJerkOpt &pt_data);
     std::vector<std::pair<int, int>> finelyCheckConstraintPointsOnly(Eigen::MatrixXd &init_points);

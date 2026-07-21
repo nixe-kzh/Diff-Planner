@@ -1,5 +1,5 @@
-#ifndef _PLANNING_VISUALIZATION_H_
-#define _PLANNING_VISUALIZATION_H_
+#ifndef DIFF_PLANNER_TRAJ_UTILS_INCLUDE_TRAJ_UTILS_PLANNING_VISUALIZATION_H_
+#define DIFF_PLANNER_TRAJ_UTILS_INCLUDE_TRAJ_UTILS_PLANNING_VISUALIZATION_H_
 
 #include <eigen3/Eigen/Eigen>
 #include <algorithm>
@@ -10,30 +10,29 @@
 #include <visualization_msgs/MarkerArray.h>
 #include <stdlib.h>
 
-using std::vector;
 namespace diff_planner
 {
   class PlanningVisualization
   {
   private:
-    ros::NodeHandle node;
+    ros::NodeHandle node_;
 
-    ros::Publisher goal_point_pub;
-    ros::Publisher global_list_pub;
-    ros::Publisher init_list_pub;
-    ros::Publisher optimal_list_pub;
-    ros::Publisher failed_list_pub;
-    ros::Publisher a_star_list_pub;
-    ros::Publisher guide_vector_pub;
+    ros::Publisher goal_point_pub_;
+    ros::Publisher global_list_pub_;
+    ros::Publisher initial_list_pub_;
+    ros::Publisher optimal_list_pub_;
+    ros::Publisher failed_list_pub_;
+    ros::Publisher a_star_list_pub_;
+    ros::Publisher guide_vector_pub_;
 
-    ros::Publisher intermediate_pt0_pub;
-    ros::Publisher intermediate_pt1_pub;
-    ros::Publisher intermediate_grad0_pub;
-    ros::Publisher intermediate_grad1_pub;
-    ros::Publisher intermediate_grad_smoo_pub;
-    ros::Publisher intermediate_grad_dist_pub;
-    ros::Publisher intermediate_grad_feas_pub;
-    ros::Publisher intermediate_grad_swarm_pub;
+    ros::Publisher intermediate_point_0_pub_;
+    ros::Publisher intermediate_point_1_pub_;
+    ros::Publisher intermediate_gradient_0_pub_;
+    ros::Publisher intermediate_gradient_1_pub_;
+    ros::Publisher intermediate_smoothness_gradient_pub_;
+    ros::Publisher intermediate_distance_gradient_pub_;
+    ros::Publisher intermediate_feasibility_gradient_pub_;
+    ros::Publisher intermediate_swarm_gradient_pub_;
 
   public:
     PlanningVisualization(/* args */) {}
@@ -42,25 +41,41 @@ namespace diff_planner
 
     typedef std::shared_ptr<PlanningVisualization> Ptr;
 
-    void displayMarkerList(ros::Publisher &pub, const vector<Eigen::Vector3d> &list, double scale,
-                           Eigen::Vector4d color, int id,  bool show_sphere = true);
-    void generatePathDisplayArray(visualization_msgs::MarkerArray &array,
-                                  const vector<Eigen::Vector3d> &list, double scale, Eigen::Vector4d color, int id);
-    void generateArrowDisplayArray(visualization_msgs::MarkerArray &array,
-                                   const vector<Eigen::Vector3d> &list, double scale, Eigen::Vector4d color, int id);
-    void displayGoalPoint(Eigen::Vector3d goal_point, Eigen::Vector4d color, const double scale, int id);
-    void displayGlobalPathList(vector<Eigen::Vector3d> global_pts, const double scale, int id);
-    void displayInitPathList(vector<Eigen::Vector3d> init_pts, const double scale, int id);
-    void displayMultiInitPathList(vector<vector<Eigen::Vector3d>> init_trajs, const double scale);
-    void displayMultiOptimalPathList(vector<vector<Eigen::Vector3d>> optimal_trajs, const double scale);
-    void displayOptimalList(Eigen::MatrixXd optimal_pts, int id);
-    void displayFailedList(Eigen::MatrixXd failed_pts, int id);
-    void displayAStarList(std::vector<std::vector<Eigen::Vector3d>> a_star_paths, int id);
-    void displayArrowList(ros::Publisher &pub, const vector<Eigen::Vector3d> &list, double scale, Eigen::Vector4d color, int id);
+    void DisplayMarkerList(ros::Publisher &publisher,
+                           const std::vector<Eigen::Vector3d> &points, double scale,
+                           Eigen::Vector4d color, int id, bool show_sphere = true);
+    void GeneratePathDisplayArray(visualization_msgs::MarkerArray &array,
+                                  const std::vector<Eigen::Vector3d> &points,
+                                  double scale, Eigen::Vector4d color, int id);
+    void GenerateArrowDisplayArray(visualization_msgs::MarkerArray &array,
+                                   const std::vector<Eigen::Vector3d> &points,
+                                   double scale, Eigen::Vector4d color, int id);
+    void DisplayGoalPoint(Eigen::Vector3d goal_point, Eigen::Vector4d color,
+                          const double scale, int id);
+    void DisplayGlobalPathList(std::vector<Eigen::Vector3d> global_points,
+                               const double scale, int id);
+    void DisplayInitialPathList(std::vector<Eigen::Vector3d> initial_points,
+                                const double scale, int id);
+    void DisplayMultiInitialPathList(
+        std::vector<std::vector<Eigen::Vector3d>> initial_trajectories,
+        const double scale);
+    void DisplayMultiOptimalPathList(
+        std::vector<std::vector<Eigen::Vector3d>> optimal_trajectories,
+        const double scale);
+    void DisplayOptimalList(Eigen::MatrixXd optimal_points, int id);
+    void DisplayFailedList(Eigen::MatrixXd failed_points, int id);
+    void DisplayAStarList(std::vector<std::vector<Eigen::Vector3d>> a_star_paths, int id);
+    void DisplayArrowList(ros::Publisher &publisher,
+                          const std::vector<Eigen::Vector3d> &points, double scale,
+                          Eigen::Vector4d color, int id);
     
-    void displayIntermediatePt(std::string type, Eigen::MatrixXd &pts, int id, Eigen::Vector4d color);
-    void displayIntermediateGrad(std::string type, Eigen::MatrixXd &pts, Eigen::MatrixXd &grad, int id, Eigen::Vector4d color);
-    // void displayNewArrow(ros::Publisher& guide_vector_pub, diff_planner::PolyTrajOptimizer::Ptr optimizer);
+    void DisplayIntermediatePoint(std::string type, Eigen::MatrixXd &points,
+                                  int id, Eigen::Vector4d color);
+    void DisplayIntermediateGradient(std::string type, Eigen::MatrixXd &points,
+                                     Eigen::MatrixXd &gradient, int id,
+                                     Eigen::Vector4d color);
+    // void DisplayNewArrow(ros::Publisher& guide_vector_publisher,
+    //                      diff_planner::PolyTrajOptimizer::Ptr optimizer);
   };
 } // namespace diff_planner
-#endif
+#endif  // DIFF_PLANNER_TRAJ_UTILS_INCLUDE_TRAJ_UTILS_PLANNING_VISUALIZATION_H_

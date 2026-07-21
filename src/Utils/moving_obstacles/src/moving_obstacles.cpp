@@ -216,14 +216,14 @@ void joy_sub_cb(const sensor_msgs::Joy::ConstPtr &msg)
   Traj2ROSMsg(traj1, obs1_.des_clearance_, obs1_id_, MINCO_msg);
   predicted_traj_pub_.publish(MINCO_msg);
   ros::Duration(0.005).sleep();
-  visualization_->displayInitPathList(vis_pts, 0.1, obs1_id_);
+  visualization_->DisplayInitialPathList(vis_pts, 0.1, obs1_id_);
   ros::Duration(0.005).sleep();
 
   poly_traj::Trajectory traj2 = predict_traj(acc2, dir2, Eigen::Vector3d(pv2.first[0], pv2.first[1], HEIGHT), Eigen::Vector3d(pv2.second[0], pv2.second[1], 0), obs2_, vis_pts);
   Traj2ROSMsg(traj2, obs2_.des_clearance_, obs2_id_, MINCO_msg);
   predicted_traj_pub_.publish(MINCO_msg);
   ros::Duration(0.005).sleep();
-  visualization_->displayInitPathList(vis_pts, 0.1, obs2_id_);
+  visualization_->DisplayInitialPathList(vis_pts, 0.1, obs2_id_);
 }
 
 int main(int argc, char **argv)

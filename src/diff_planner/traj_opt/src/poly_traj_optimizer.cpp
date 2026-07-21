@@ -86,7 +86,7 @@ namespace diff_planner
         std::vector<std::pair<int, int>> segments_nouse;
         for (size_t i = 0; i < swarm_trajs_->size(); ++i)
         {
-          flag_swarm_too_close |= min_ellip_dist2_[i] < pow((swarm_clearance_ + swarm_trajs_->at(i).des_clearance) * 1.25, 2);
+          flag_swarm_too_close |= min_ellip_dist2_[i] < pow((swarm_clearance_ + swarm_trajs_->at(i).desired_clearance) * 1.25, 2);
         }
         if (!flag_swarm_too_close)
         {
@@ -184,7 +184,7 @@ namespace diff_planner
   }
   bool PolyTrajOptimizer::computePointsToCheck(
       poly_traj::Trajectory &traj,
-      int id_cps_end, PtsChk_t &pts_check)
+      int id_cps_end, PointsToCheck &pts_check)
   {
     pts_check.clear();
     pts_check.resize(id_cps_end);
@@ -280,7 +280,7 @@ namespace diff_planner
     bool flag_got_start = false, flag_got_end = false, flag_got_end_maybe = false;
     int i_end = ConstraintPoints::two_thirds_id(init_points, touch_goal_); // only check closed 2/3 points.
 
-    PtsChk_t pts_check;
+    PointsToCheck pts_check;
     if (!computePointsToCheck(traj, i_end, pts_check))
     {
       return CHK_RET::ERR;
@@ -1522,20 +1522,20 @@ namespace diff_planner
 
       double traj_i_satrt_time = swarm_trajs_->at(id).start_time;
       double pt_time = (t_now_ - traj_i_satrt_time) + t; // never assign a high-precision golbal time to a double directly!
-      const double CLEARANCE = (swarm_clearance_ + swarm_trajs_->at(id).des_clearance) * 1.5; // 1.5 is to compensate slight constraint violation
+      const double CLEARANCE = (swarm_clearance_ + swarm_trajs_->at(id).desired_clearance) * 1.5; // 1.5 is to compensate slight constraint violation
       const double CLEARANCE2 = CLEARANCE * CLEARANCE;
 
       Eigen::Vector3d swarm_p, swarm_v;
       if (pt_time < swarm_trajs_->at(id).duration)
       {
-        swarm_p = swarm_trajs_->at(id).traj.GetPosition(pt_time);
-        swarm_v = swarm_trajs_->at(id).traj.GetVelocity(pt_time);
+        swarm_p = swarm_trajs_->at(id).trajectory.GetPosition(pt_time);
+        swarm_v = swarm_trajs_->at(id).trajectory.GetVelocity(pt_time);
       }
       else
       {
         double exceed_time = pt_time - swarm_trajs_->at(id).duration;
-        swarm_v = swarm_trajs_->at(id).traj.GetVelocity(swarm_trajs_->at(id).duration);
-        swarm_p = swarm_trajs_->at(id).traj.GetPosition(swarm_trajs_->at(id).duration) +
+        swarm_v = swarm_trajs_->at(id).trajectory.GetVelocity(swarm_trajs_->at(id).duration);
+        swarm_p = swarm_trajs_->at(id).trajectory.GetPosition(swarm_trajs_->at(id).duration) +
                   exceed_time * swarm_v;
       }
       Eigen::Vector3d dist_vec = p - swarm_p;
@@ -1698,7 +1698,7 @@ namespace diff_planner
     cps_.points = points;
   }
 
-  void PolyTrajOptimizer::setSwarmTrajs(SwarmTrajData *swarm_trajs_ptr) { swarm_trajs_ = swarm_trajs_ptr; }
+  void PolyTrajOptimizer::setSwarmTrajs(SwarmTrajectoryData *swarm_trajs_ptr) { swarm_trajs_ = swarm_trajs_ptr; }
 
   void PolyTrajOptimizer::setDroneId(const int drone_id) { drone_id_ = drone_id; }
 

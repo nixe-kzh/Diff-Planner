@@ -16,12 +16,12 @@ namespace diff_planner
   {
     /* read algorithm parameters */
 
-    nh.param("manager/max_vel", pp_.max_vel_, -1.0);
-    nh.param("manager/max_acc", pp_.max_acc_, -1.0);
-    nh.param("manager/feasibility_tolerance", pp_.feasibility_tolerance_, 0.0);
-    nh.param("manager/polyTraj_piece_length", pp_.polyTraj_piece_length, -1.0);
-    nh.param("manager/planning_horizon", pp_.planning_horizen_, 5.0);
-    nh.param("manager/use_multitopology_trajs", pp_.use_multitopology_trajs, false);
+    nh.param("manager/max_vel", pp_.max_velocity, -1.0);
+    nh.param("manager/max_acc", pp_.max_acceleration, -1.0);
+    nh.param("manager/feasibility_tolerance", pp_.feasibility_tolerance, 0.0);
+    nh.param("manager/polyTraj_piece_length", pp_.trajectory_piece_length, -1.0);
+    nh.param("manager/planning_horizon", pp_.planning_horizon, 5.0);
+    nh.param("manager/use_multitopology_trajs", pp_.use_multi_topology_trajectories, false);
     nh.param("manager/drone_id", pp_.drone_id, -1);
 
     grid_map_.reset(new GridMap);
@@ -33,7 +33,7 @@ namespace diff_planner
 
     visualization_ = vis;
 
-    ploy_traj_opt_->setSwarmTrajs(&traj_.swarm_traj);
+    ploy_traj_opt_->setSwarmTrajs(&traj_.swarm_trajectories_);
     ploy_traj_opt_->setDroneId(pp_.drone_id);
   }
 
@@ -56,7 +56,7 @@ namespace diff_planner
 
     /*** STEP 1: INIT ***/
     ploy_traj_opt_->setIfTouchGoal(touch_goal);
-    double ts = pp_.polyTraj_piece_length / pp_.max_vel_;
+    double ts = pp_.trajectory_piece_length / pp_.max_velocity;
 
     poly_traj::MinJerkOpt initMJO;
     if (!computeInitState(start_pt, start_vel, start_acc, local_target_pt, local_target_vel,
@@ -77,7 +77,7 @@ namespace diff_planner
     std::vector<Eigen::Vector3d> point_set;
     for (int i = 0; i < cstr_pts.cols(); ++i)
       point_set.push_back(cstr_pts.col(i));
-    visualization_->displayInitPathList(point_set, 0.2, 0);
+    visualization_->DisplayInitialPathList(point_set, 0.2, 0);
 
     t_start = ros::Time::now();
 
@@ -88,7 +88,7 @@ namespace diff_planner
 
     // ROS_ERROR("BBBB");
 
-    if (pp_.use_multitopology_trajs)
+    if (pp_.use_multi_topology_trajectories)
     {
       std::vector<ConstraintPoints> trajs = ploy_traj_opt_->distinctiveTrajs(segments);
       Eigen::VectorXi success = Eigen::VectorXi::Zero(trajs.size());
@@ -137,7 +137,7 @@ namespace diff_planner
              << " Success:fail=" << success.sum() << ":" << success.size() - success.sum() << endl;
       }
 
-      visualization_->displayMultiOptimalPathList(vis_trajs, 0.1); // This visuallization will take up several milliseconds.
+      visualization_->DisplayMultiOptimalPathList(vis_trajs, 0.1); // This visuallization will take up several milliseconds.
     }
     else
     {
@@ -173,14 +173,14 @@ namespace diff_planner
 
       setLocalTrajFromOpt(best_MJO, touch_goal);
       cstr_pts = best_MJO.GetInitialConstraintPoints(ploy_traj_opt_->get_cps_num_prePiece_());
-      visualization_->displayOptimalList(cstr_pts, 0);
+      visualization_->DisplayOptimalList(cstr_pts, 0);
 
       continous_failures_count_ = 0;
     }
     else
     {
       cstr_pts = ploy_traj_opt_->getMinJerkOpt().GetInitialConstraintPoints(ploy_traj_opt_->get_cps_num_prePiece_());
-      visualization_->displayFailedList(cstr_pts, 0);
+      visualization_->DisplayFailedList(cstr_pts, 0);
 
       continous_failures_count_++;
     }
@@ -246,7 +246,7 @@ namespace diff_planner
       poly_traj::Trajectory initTraj = initMJO.GetTrajectory();
 
       /* generate the real init trajectory */
-      piece_nums = round((headState.col(0) - tailState.col(0)).norm() / pp_.polyTraj_piece_length);
+      piece_nums = round((headState.col(0) - tailState.col(0)).norm() / pp_.trajectory_piece_length);
       if (piece_nums < 2)
         piece_nums = 2;
       double piece_dur = init_of_init_totaldur / (double)piece_nums;
@@ -269,23 +269,23 @@ namespace diff_planner
     }
     else /*** case 2: initialize from previous optimal trajectory ***/
     {
-      if (traj_.global_traj.last_glb_t_of_lc_tgt < 0.0)
+      if (traj_.global_trajectory_.previous_local_target_time < 0.0)
       {
         ROS_ERROR("You are initialzing a trajectory from a previous optimal trajectory, but no previous trajectories up to now.");
         return false;
       }
 
       /* the trajectory time system is a little bit complicated... */
-      double passed_t_on_lctraj = ros::Time::now().toSec() - traj_.local_traj.start_time;
-      double t_to_lc_end = traj_.local_traj.duration - passed_t_on_lctraj;
+      double passed_t_on_lctraj = ros::Time::now().toSec() - traj_.local_trajectory_.start_time;
+      double t_to_lc_end = traj_.local_trajectory_.duration - passed_t_on_lctraj;
       if (t_to_lc_end < 0)
       {
         ROS_INFO("t_to_lc_end < 0, exit and wait for another call.");
         return false;
       }
       double t_to_lc_tgt = t_to_lc_end +
-                           (traj_.global_traj.glb_t_of_lc_tgt - traj_.global_traj.last_glb_t_of_lc_tgt);
-      int piece_nums = ceil((start_pt - local_target_pt).norm() / pp_.polyTraj_piece_length);
+                           (traj_.global_trajectory_.local_target_time - traj_.global_trajectory_.previous_local_target_time);
+      int piece_nums = ceil((start_pt - local_target_pt).norm() / pp_.trajectory_piece_length);
       if (piece_nums < 2)
         piece_nums = 2;
 
@@ -300,12 +300,12 @@ namespace diff_planner
       {
         if (t < t_to_lc_end)
         {
-          innerPs.col(i) = traj_.local_traj.traj.GetPosition(t + passed_t_on_lctraj);
+          innerPs.col(i) = traj_.local_trajectory_.trajectory.GetPosition(t + passed_t_on_lctraj);
         }
         else if (t <= t_to_lc_tgt)
         {
-          double glb_t = t - t_to_lc_end + traj_.global_traj.last_glb_t_of_lc_tgt - traj_.global_traj.global_start_time;
-          innerPs.col(i) = traj_.global_traj.traj.GetPosition(glb_t);
+          double glb_t = t - t_to_lc_end + traj_.global_trajectory_.previous_local_target_time - traj_.global_trajectory_.global_start_time;
+          innerPs.col(i) = traj_.global_trajectory_.trajectory.GetPosition(glb_t);
         }
         else
         {
@@ -330,39 +330,39 @@ namespace diff_planner
     double t;
     touch_goal = false;
 
-    traj_.global_traj.last_glb_t_of_lc_tgt = traj_.global_traj.glb_t_of_lc_tgt;
+    traj_.global_trajectory_.previous_local_target_time = traj_.global_trajectory_.local_target_time;
 
-    double t_step = planning_horizen / 20 / pp_.max_vel_;
+    double t_step = planning_horizen / 20 / pp_.max_velocity;
     // double dist_min = 9999, dist_min_t = 0.0;
-    for (t = traj_.global_traj.glb_t_of_lc_tgt;
-         t < (traj_.global_traj.global_start_time + traj_.global_traj.duration);
+    for (t = traj_.global_trajectory_.local_target_time;
+         t < (traj_.global_trajectory_.global_start_time + traj_.global_trajectory_.duration);
          t += t_step)
     {
-      Eigen::Vector3d pos_t = traj_.global_traj.traj.GetPosition(t - traj_.global_traj.global_start_time);
+      Eigen::Vector3d pos_t = traj_.global_trajectory_.trajectory.GetPosition(t - traj_.global_trajectory_.global_start_time);
       double dist = (pos_t - start_pt).norm();
 
       if (dist >= planning_horizen)
       {
         local_target_pos = pos_t;
-        traj_.global_traj.glb_t_of_lc_tgt = t;
+        traj_.global_trajectory_.local_target_time = t;
         break;
       }
     }
 
-    if ((t - traj_.global_traj.global_start_time) >= traj_.global_traj.duration - 1e-5) // Last global point
+    if ((t - traj_.global_trajectory_.global_start_time) >= traj_.global_trajectory_.duration - 1e-5) // Last global point
     {
       local_target_pos = global_end_pt;
-      traj_.global_traj.glb_t_of_lc_tgt = traj_.global_traj.global_start_time + traj_.global_traj.duration;
+      traj_.global_trajectory_.local_target_time = traj_.global_trajectory_.global_start_time + traj_.global_trajectory_.duration;
       touch_goal = true;
     }
 
-    if ((global_end_pt - local_target_pos).norm() < (pp_.max_vel_ * pp_.max_vel_) / (2 * pp_.max_acc_))
+    if ((global_end_pt - local_target_pos).norm() < (pp_.max_velocity * pp_.max_velocity) / (2 * pp_.max_acceleration))
     {
       local_target_vel = Eigen::Vector3d::Zero();
     }
     else
     {
-      local_target_vel = traj_.global_traj.traj.GetVelocity(t - traj_.global_traj.global_start_time);
+      local_target_vel = traj_.global_trajectory_.trajectory.GetVelocity(t - traj_.global_trajectory_.global_start_time);
     }
   }
 
@@ -370,11 +370,11 @@ namespace diff_planner
   {
     poly_traj::Trajectory traj = opt.GetTrajectory();
     Eigen::MatrixXd cps = opt.GetInitialConstraintPoints(getCpsNumPrePiece());
-    PtsChk_t pts_to_check;
+    PointsToCheck pts_to_check;
     bool ret = ploy_traj_opt_->computePointsToCheck(traj, ConstraintPoints::two_thirds_id(cps, touch_goal), pts_to_check);
     if (ret && pts_to_check.size() >= 1 && pts_to_check.back().size() >= 1)
     {
-      traj_.setLocalTraj(traj, pts_to_check, ros::Time::now().toSec());
+      traj_.SetLocalTrajectory(traj, pts_to_check, ros::Time::now().toSec());
     }
 
     return ret;
@@ -397,23 +397,23 @@ namespace diff_planner
 
   bool DiffPlannerManager::checkCollision(int drone_id)
   {
-    if (traj_.local_traj.start_time < 1e9) // It means my first planning has not started
+    if (traj_.local_trajectory_.start_time < 1e9) // It means my first planning has not started
       return false;
-    if (traj_.swarm_traj[drone_id].drone_id != drone_id) // The trajectory is invalid
+    if (traj_.swarm_trajectories_[drone_id].drone_id != drone_id) // The trajectory is invalid
       return false;
 
-    double my_traj_start_time = traj_.local_traj.start_time;
-    double other_traj_start_time = traj_.swarm_traj[drone_id].start_time;
+    double my_traj_start_time = traj_.local_trajectory_.start_time;
+    double other_traj_start_time = traj_.swarm_trajectories_[drone_id].start_time;
 
     double t_start = max(my_traj_start_time, other_traj_start_time);
-    double t_end = min(my_traj_start_time + traj_.local_traj.duration * 2 / 3,
-                       other_traj_start_time + traj_.swarm_traj[drone_id].duration);
+    double t_end = min(my_traj_start_time + traj_.local_trajectory_.duration * 2 / 3,
+                       other_traj_start_time + traj_.swarm_trajectories_[drone_id].duration);
 
     for (double t = t_start; t < t_end; t += 0.03)
     {
-      if ((traj_.local_traj.traj.GetPosition(t - my_traj_start_time) -
-           traj_.swarm_traj[drone_id].traj.GetPosition(t - other_traj_start_time))
-              .norm() < (getSwarmClearance() + traj_.swarm_traj[drone_id].des_clearance) )
+      if ((traj_.local_trajectory_.trajectory.GetPosition(t - my_traj_start_time) -
+           traj_.swarm_trajectories_[drone_id].trajectory.GetPosition(t - other_traj_start_time))
+              .norm() < (getSwarmClearance() + traj_.swarm_trajectories_[drone_id].desired_clearance) )
       {
         return true;
       }
@@ -453,7 +453,7 @@ namespace diff_planner
 
     globalMJO.Reset(headState, tailState, waypoints.size());
 
-    double des_vel = pp_.max_vel_ / 1.5;
+    double des_vel = pp_.max_velocity / 1.5;
     Eigen::VectorXd time_vec(waypoints.size());
 
     for (int j = 0; j < 2; ++j)
@@ -466,9 +466,9 @@ namespace diff_planner
 
       globalMJO.Generate(innerPts, time_vec);
 
-      if (globalMJO.GetTrajectory().GetMaxVelocityRate() < pp_.max_vel_ ||
-          start_vel.norm() > pp_.max_vel_ ||
-          end_vel.norm() > pp_.max_vel_)
+      if (globalMJO.GetTrajectory().GetMaxVelocityRate() < pp_.max_velocity ||
+          start_vel.norm() > pp_.max_velocity ||
+          end_vel.norm() > pp_.max_velocity)
       {
         break;
       }
@@ -486,7 +486,7 @@ namespace diff_planner
     }
 
     auto time_now = ros::Time::now();
-    traj_.setGlobalTraj(globalMJO.GetTrajectory(), time_now.toSec());
+    traj_.SetGlobalTrajectory(globalMJO.GetTrajectory(), time_now.toSec());
 
     return true;
   }
