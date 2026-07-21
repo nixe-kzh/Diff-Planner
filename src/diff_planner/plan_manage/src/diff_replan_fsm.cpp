@@ -130,7 +130,7 @@ namespace diff_planner
     {
       if (planner_manager_->pp_.drone_id <= 0 || (planner_manager_->pp_.drone_id >= 1 && have_recv_pre_agent_))
       {
-        if (!mondify_final_goal_ && planner_manager_->grid_map_->getInflateOccupancy(final_goal_))
+        if (!mondify_final_goal_ && planner_manager_->grid_map_->GetInflatedOccupancy(final_goal_))
         {
           ROS_WARN("Final goal in obstacle, unsafe. Emergency stop.");
           need_hover_stop_ = true;
@@ -158,7 +158,7 @@ namespace diff_planner
 
     case GEN_NEW_TRAJ:
     {
-      if (!mondify_final_goal_ && planner_manager_->grid_map_->getInflateOccupancy(final_goal_))
+      if (!mondify_final_goal_ && planner_manager_->grid_map_->GetInflatedOccupancy(final_goal_))
       {
         ROS_WARN("Final goal in obstacle, unsafe. Emergency stop.");
         need_hover_stop_ = true;
@@ -212,7 +212,7 @@ namespace diff_planner
       const PtsChk_t *chk_ptr = &planner_manager_->traj_.local_traj.pts_chk;
       bool close_to_current_traj_end = (chk_ptr->size() >= 1 && chk_ptr->back().size() >= 1) ? chk_ptr->back().back().first - t_cur < emergency_time_ : 0; // In case of empty vector
 
-      if (planner_manager_->grid_map_->getInflateOccupancy(final_goal_))
+      if (planner_manager_->grid_map_->GetInflatedOccupancy(final_goal_))
       {
         if (!mondify_final_goal_)
         {
@@ -436,7 +436,7 @@ namespace diff_planner
       return;
 
     /* ---------- check lost of depth ---------- */
-    if (map->getOdomDepthTimeout())
+    if (map->GetOdometryDepthTimeout())
     {
       ROS_ERROR("Depth Lost! EMERGENCY_STOP");
       enable_fail_safe_ = false;
@@ -475,7 +475,7 @@ namespace diff_planner
         Eigen::Vector3d p = pts_chk[i][j].second;
 
         bool dangerous = false;
-        dangerous |= map->getInflateOccupancy(p);
+        dangerous |= map->GetInflatedOccupancy(p);
 
         for (size_t id = 0; id < planner_manager_->traj_.swarm_traj.size(); id++)
         {
@@ -686,21 +686,21 @@ namespace diff_planner
 
   bool DiffReplanFSM::mondifyInCollisionFinalGoal()
   {
-    if (planner_manager_->grid_map_->getInflateOccupancy(final_goal_))
+    if (planner_manager_->grid_map_->GetInflatedOccupancy(final_goal_))
     {
       Eigen::Vector3d orig_goal = final_goal_;
-      double t_step = planner_manager_->grid_map_->getResolution() / planner_manager_->pp_.max_vel_;
+      double t_step = planner_manager_->grid_map_->GetResolution() / planner_manager_->pp_.max_vel_;
       for (double t = planner_manager_->traj_.global_traj.duration; t > 0; t -= t_step)
       {
         Eigen::Vector3d pt = planner_manager_->traj_.global_traj.traj.getPos(t);
-        if (!planner_manager_->grid_map_->getInflateOccupancy(pt))
+        if (!planner_manager_->grid_map_->GetInflatedOccupancy(pt))
         {
           for (int i = 6; i > 0; i--)
           {
             if (t - i * t_step > 0)
             {
               Eigen::Vector3d pt_tmp = planner_manager_->traj_.global_traj.traj.getPos(t - i * t_step);
-              if (!planner_manager_->grid_map_->getInflateOccupancy(pt_tmp))
+              if (!planner_manager_->grid_map_->GetInflatedOccupancy(pt_tmp))
               {
                 pt = pt_tmp;
                 break;
@@ -728,7 +728,7 @@ namespace diff_planner
   void DiffReplanFSM::waypointCallback(const geometry_msgs::PoseStampedPtr &msg)
   {
     Eigen::Vector3d end_wp(msg->pose.position.x, msg->pose.position.y, msg->pose.position.z);
-    if (planner_manager_->grid_map_->getInflateOccupancy(end_wp) == -1)
+    if (planner_manager_->grid_map_->GetInflatedOccupancy(end_wp) == -1)
     {
       ROS_WARN("The goal is outside the safe fence, ignore this goal!");
       return;
@@ -1009,10 +1009,10 @@ namespace diff_planner
     {
       Eigen::Vector3d forward_p = traj->traj.getPos(traj_t);
 
-      double reso = map->getResolution();
+      double reso = map->GetResolution();
       for (;; forward_p(2) -= reso)
       {
-        int ret = map->getOccupancy(forward_p);
+        int ret = map->GetOccupancy(forward_p);
         if (ret == -1) // reach map bottom
         {
           return false;

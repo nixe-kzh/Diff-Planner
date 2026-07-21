@@ -1,14 +1,14 @@
-#ifndef RAYCAST_H_
-#define RAYCAST_H_
+#ifndef DIFF_PLANNER_PLAN_ENV_INCLUDE_PLAN_ENV_RAYCAST_H_
+#define DIFF_PLANNER_PLAN_ENV_INCLUDE_PLAN_ENV_RAYCAST_H_
 
 #include <Eigen/Eigen>
 #include <vector>
 
-double signum(double x);
+int Signum(int x);
 
-double mod(double value, double modulus);
+double Mod(double value, double modulus);
 
-double intbound(double s, double ds);
+double IntBound(double s, double ds);
 
 // void Raycast(const Eigen::Vector3d& start, const Eigen::Vector3d& end, const Eigen::Vector3d& min,
 //              const Eigen::Vector3d& max, int& output_points_cnt, Eigen::Vector3d* output);
@@ -27,22 +27,22 @@ private:
   int x_;
   int y_;
   int z_;
-  int endX_;
-  int endY_;
-  int endZ_;
-  double maxDist_;
+  int end_x_;
+  int end_y_;
+  int end_z_;
+  double max_distance_;
   double dx_;
   double dy_;
   double dz_;
-  int stepX_;
-  int stepY_;
-  int stepZ_;
-  double tMaxX_;
-  double tMaxY_;
-  double tMaxZ_;
-  double tDeltaX_;
-  double tDeltaY_;
-  double tDeltaZ_;
+  int step_x_;
+  int step_y_;
+  int step_z_;
+  double max_x_time_;
+  double max_y_time_;
+  double max_z_time_;
+  double delta_x_time_;
+  double delta_y_time_;
+  double delta_z_time_;
   double dist_;
 
   int step_num_;
@@ -53,11 +53,11 @@ public:
   ~RayCaster() {
   }
 
-  bool setInput(const Eigen::Vector3d& start,
+  bool SetInput(const Eigen::Vector3d& start,
                 const Eigen::Vector3d& end /* , const Eigen::Vector3d& min,
                 const Eigen::Vector3d& max */);
 
-  bool step(Eigen::Vector3d& ray_pt);
+  bool Step(Eigen::Vector3d& ray_point);
 };
 
-#endif  // RAYCAST_H_
+#endif  // DIFF_PLANNER_PLAN_ENV_INCLUDE_PLAN_ENV_RAYCAST_H_

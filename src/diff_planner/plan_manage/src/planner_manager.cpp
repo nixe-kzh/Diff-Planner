@@ -25,7 +25,7 @@ namespace diff_planner
     nh.param("manager/drone_id", pp_.drone_id, -1);
 
     grid_map_.reset(new GridMap);
-    grid_map_->initMap(nh);
+    grid_map_->InitMap(nh);
 
     ploy_traj_opt_.reset(new PolyTrajOptimizer);
     ploy_traj_opt_->setParam(nh);

@@ -140,7 +140,7 @@ namespace diff_planner
   {
     poly_traj::Trajectory traj = pt_data.getTraj();
     Eigen::VectorXd durations = traj.getDurations();
-    const double RES = grid_map_->getResolution(), RES_2 = RES / 2;
+    const double RES = grid_map_->GetResolution(), RES_2 = RES / 2;
     double t_step = min(RES / max_vel_, durations.minCoeff() / max(cps_num_prePiece_, 1) / 1.5);
     double traj_duration = traj.getTotalDuration();
 
@@ -188,7 +188,7 @@ namespace diff_planner
   {
     pts_check.clear();
     pts_check.resize(id_cps_end);
-    const double RES = grid_map_->getResolution(), RES_2 = RES / 2;
+    const double RES = grid_map_->GetResolution(), RES_2 = RES / 2;
     Eigen::VectorXd durations = traj.getDurations();
     Eigen::VectorXd t_seg_start(durations.size() + 1);
     t_seg_start(0) = 0;
@@ -290,7 +290,7 @@ namespace diff_planner
     {
       for (size_t j = 0; j < pts_check[i].size(); ++j)
       {
-        occ = grid_map_->getInflateOccupancy(pts_check[i][j].second);
+        occ = grid_map_->GetInflatedOccupancy(pts_check[i][j].second);
 
         if (occ && !last_occ)
         {
@@ -347,7 +347,7 @@ namespace diff_planner
     {
       // Search from back to head
       Eigen::Vector3d in(init_points.col(segment_ids[i].second)), out(init_points.col(segment_ids[i].first));
-      ASTAR_RET ret = a_star_->AstarSearch(grid_map_->getResolution(), in, out);
+      ASTAR_RET ret = a_star_->AstarSearch(grid_map_->GetResolution(), in, out);
       if (ret == ASTAR_RET::SUCCESS)
       {
         a_star_pathes.push_back(a_star_->getPath());
@@ -496,14 +496,14 @@ namespace diff_planner
           if (length > 1e-5)
           {
             cps_.flag_temp[j] = true;
-            for (double a = length; a >= 0.0; a -= grid_map_->getResolution())
+            for (double a = length; a >= 0.0; a -= grid_map_->GetResolution())
             {
-              bool occ = grid_map_->getInflateOccupancy((a / length) * intersection_point + (1 - a / length) * init_points.col(j));
+              bool occ = grid_map_->GetInflatedOccupancy((a / length) * intersection_point + (1 - a / length) * init_points.col(j));
 
-              if (occ || a < grid_map_->getResolution())
+              if (occ || a < grid_map_->GetResolution())
               {
                 if (occ)
-                  a += grid_map_->getResolution();
+                  a += grid_map_->GetResolution();
                 cps_.base_point[j].push_back((a / length) * intersection_point + (1 - a / length) * init_points.col(j));
                 cps_.direction[j].push_back((intersection_point - init_points.col(j)).normalized());
                 break;
@@ -612,14 +612,14 @@ namespace diff_planner
     for (int i = 1; i <= i_end; ++i)
     {
 
-      bool occ = grid_map_->getInflateOccupancy(cps_.points.col(i));
+      bool occ = grid_map_->GetInflatedOccupancy(cps_.points.col(i));
 
       /*** check if the new collision will be valid ***/
       if (occ)
       {
         for (size_t k = 0; k < cps_.direction[i].size(); ++k)
         {
-          if ((cps_.points.col(i) - cps_.base_point[i][k]).dot(cps_.direction[i][k]) < 1 * grid_map_->getResolution()) // current point is outside all the collision_points.
+          if ((cps_.points.col(i) - cps_.base_point[i][k]).dot(cps_.direction[i][k]) < 1 * grid_map_->GetResolution()) // current point is outside all the collision_points.
           {
             occ = false;
             break;
@@ -634,7 +634,7 @@ namespace diff_planner
         int j;
         for (j = i - 1; j >= 0; --j)
         {
-          occ = grid_map_->getInflateOccupancy(cps_.points.col(j));
+          occ = grid_map_->GetInflatedOccupancy(cps_.points.col(j));
           if (!occ)
           {
             in_id = j;
@@ -649,7 +649,7 @@ namespace diff_planner
 
         for (j = i + 1; j < cps_.cp_size; ++j)
         {
-          occ = grid_map_->getInflateOccupancy(cps_.points.col(j));
+          occ = grid_map_->GetInflatedOccupancy(cps_.points.col(j));
 
           if (!occ)
           {
@@ -678,7 +678,7 @@ namespace diff_planner
       {
         /*** a star search ***/
         Eigen::Vector3d in(cps_.points.col(segment_ids[i].second)), out(cps_.points.col(segment_ids[i].first));
-        ASTAR_RET ret = a_star_->AstarSearch(/*(in-out).norm()/10+0.05*/ grid_map_->getResolution(), in, out);
+        ASTAR_RET ret = a_star_->AstarSearch(/*(in-out).norm()/10+0.05*/ grid_map_->GetResolution(), in, out);
         if (ret == ASTAR_RET::SUCCESS)
         {
           a_star_pathes.push_back(a_star_->getPath());
@@ -765,14 +765,14 @@ namespace diff_planner
             if (length > 1e-5)
             {
               cps_.flag_temp[j] = true;
-              for (double a = length; a >= 0.0; a -= grid_map_->getResolution())
+              for (double a = length; a >= 0.0; a -= grid_map_->GetResolution())
               {
-                bool occ = grid_map_->getInflateOccupancy((a / length) * intersection_point + (1 - a / length) * cps_.points.col(j));
+                bool occ = grid_map_->GetInflatedOccupancy((a / length) * intersection_point + (1 - a / length) * cps_.points.col(j));
 
-                if (occ || a < grid_map_->getResolution())
+                if (occ || a < grid_map_->GetResolution())
                 {
                   if (occ)
-                    a += grid_map_->getResolution();
+                    a += grid_map_->GetResolution();
                   cps_.base_point[j].push_back((a / length) * intersection_point + (1 - a / length) * cps_.points.col(j));
                   cps_.direction[j].push_back((intersection_point - cps_.points.col(j)).normalized());
                   break;
@@ -880,7 +880,7 @@ namespace diff_planner
     int seg_upbound = std::min((int)segments.size(), static_cast<int>(floor(log(MAX_TRAJS) / log(VARIS))));
     std::vector<ConstraintPoints> control_pts_buf;
     control_pts_buf.reserve(MAX_TRAJS);
-    const double RESOLUTION = grid_map_->getResolution();
+    const double RESOLUTION = grid_map_->GetResolution();
     const double CTRL_PT_DIST = (cps_.points.col(0) - cps_.points.col(cps_.cp_size - 1)).norm() / (cps_.cp_size - 1);
 
     // Step 1. Find the opposite vectors and base points for every segment.
@@ -909,7 +909,7 @@ namespace diff_planner
           for (double a = 1; a > 0; a -= step_size)
           {
             Eigen::Vector3d pt(a * RichInfoSegs[i].first.points.col(j) + (1 - a) * RichInfoSegs[i].first.points.col(j + 1));
-            if (grid_map_->getInflateOccupancy(pt))
+            if (grid_map_->GetInflatedOccupancy(pt))
             {
               occ_start_id = j;
               occ_start_pt = pt;
@@ -925,7 +925,7 @@ namespace diff_planner
           for (double a = 1; a > 0; a -= step_size)
           {
             Eigen::Vector3d pt(a * RichInfoSegs[i].first.points.col(j) + (1 - a) * RichInfoSegs[i].first.points.col(j - 1));
-            if (grid_map_->getInflateOccupancy(pt))
+            if (grid_map_->GetInflatedOccupancy(pt))
             {
               occ_end_id = j;
               occ_end_pt = pt;
@@ -992,14 +992,14 @@ namespace diff_planner
             base_pt_reverse = RichInfoSegs[i].first.points.col(j) + base_vec_reverse * (RichInfoSegs[i].first.base_point[j][0] - RichInfoSegs[i].first.points.col(j)).norm();
           }
 
-          if (grid_map_->getInflateOccupancy(base_pt_reverse)) // Search outward.
+          if (grid_map_->GetInflatedOccupancy(base_pt_reverse)) // Search outward.
           {
             double l_upbound = 5 * CTRL_PT_DIST; // "5" is the threshold.
             double l = RESOLUTION;
             for (; l <= l_upbound; l += RESOLUTION)
             {
               Eigen::Vector3d base_pt_temp = base_pt_reverse + l * base_vec_reverse;
-              if (!grid_map_->getInflateOccupancy(base_pt_temp))
+              if (!grid_map_->GetInflatedOccupancy(base_pt_temp))
               {
                 RichInfoSegs[i].second.base_point[j][0] = base_pt_temp;
                 RichInfoSegs[i].second.direction[j][0] = base_vec_reverse;
@@ -1060,14 +1060,14 @@ namespace diff_planner
         Eigen::Vector3d base_vec_reverse = -RichInfoSegs[i].first.direction[0][0];
         Eigen::Vector3d base_pt_reverse = RichInfoSegs[i].first.points.col(0) + base_vec_reverse * (RichInfoSegs[i].first.base_point[0][0] - RichInfoSegs[i].first.points.col(0)).norm();
 
-        if (grid_map_->getInflateOccupancy(base_pt_reverse)) // Search outward.
+        if (grid_map_->GetInflatedOccupancy(base_pt_reverse)) // Search outward.
         {
           double l_upbound = 5 * CTRL_PT_DIST; // "5" is the threshold.
           double l = RESOLUTION;
           for (; l <= l_upbound; l += RESOLUTION)
           {
             Eigen::Vector3d base_pt_temp = base_pt_reverse + l * base_vec_reverse;
-            if (!grid_map_->getInflateOccupancy(base_pt_temp))
+            if (!grid_map_->GetInflatedOccupancy(base_pt_temp))
             {
               RichInfoSegs[i].second.base_point[0][0] = base_pt_temp;
               RichInfoSegs[i].second.direction[0][0] = base_vec_reverse;
