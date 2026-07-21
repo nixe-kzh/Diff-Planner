@@ -10,12 +10,12 @@ using namespace std;
 namespace diff_planner
 {
   /* main planning API */
-  bool PolyTrajOptimizer::optimizeTrajectory(
-      const Eigen::MatrixXd &iniState, const Eigen::MatrixXd &finState,
-      const Eigen::MatrixXd &initInnerPts, const Eigen::VectorXd &initT,
+  bool PolyTrajOptimizer::OptimizeTrajectory(
+      const Eigen::MatrixXd &initial_state, const Eigen::MatrixXd &final_state,
+      const Eigen::MatrixXd &initial_inner_points, const Eigen::VectorXd &initial_durations,
       double &final_cost)
   {
-    if (initInnerPts.cols() != (initT.size() - 1))
+    if (initial_inner_points.cols() != (initial_durations.size() - 1))
     {
       ROS_ERROR("initInnerPts.cols() != (initT.size()-1)");
       return false;
@@ -23,21 +23,21 @@ namespace diff_planner
 
     // Preparision 1: Some mise params
     ros::Time t0 = ros::Time::now(), t1, t2;
-    int restart_nums = 0, rebound_times = 0;
-    bool flag_force_return, flag_still_unsafe, flag_success, flag_swarm_too_close;
-    multitopology_data_.initial_obstacles_avoided = false;
-    wei_swarm_mod_ = wei_swarm_;
+    int restart_count = 0, rebound_count = 0;
+    bool force_return, still_unsafe, success, swarm_too_close;
+    multi_topology_data_.initial_obstacles_avoided = false;
+    modified_swarm_weight_ = swarm_weight_;
 
     // Preparision 2: Trajectory related params
-    t_now_ = ros::Time::now().toSec();
-    piece_num_ = initT.size();
-    jerkOpt_.Reset(iniState, finState, piece_num_);
-    variable_num_ = 4 * (piece_num_ - 1) + 1;
-    double x_init[variable_num_];
-    memcpy(x_init, initInnerPts.data(), initInnerPts.size() * sizeof(x_init[0]));
-    Eigen::Map<Eigen::VectorXd> Vt(x_init + initInnerPts.size(), initT.size());
-    RealT2VirtualT(initT, Vt);
-    min_ellip_dist2_.resize(swarm_trajs_->size());
+    current_time_ = ros::Time::now().toSec();
+    piece_count_ = initial_durations.size();
+    jerk_optimizer_.Reset(initial_state, final_state, piece_count_);
+    variable_count_ = 4 * (piece_count_ - 1) + 1;
+    double x_init[variable_count_];
+    memcpy(x_init, initial_inner_points.data(), initial_inner_points.size() * sizeof(x_init[0]));
+    Eigen::Map<Eigen::VectorXd> virtual_time(x_init + initial_inner_points.size(), initial_durations.size());
+    RealTimeToVirtualTime(initial_durations, virtual_time);
+    minimum_ellipsoid_distances_squared_.resize(swarm_trajectories_->size());
 
     // Preparision 3: LBFGS related params
     lbfgs::lbfgs_parameter_t lbfgs_params;
@@ -51,28 +51,28 @@ namespace diff_planner
     do
     {
       /* ---------- prepare ---------- */
-      iter_num_ = 0;
-      flag_force_return = false;
-      force_stop_type_ = DONT_STOP;
-      flag_still_unsafe = false;
-      flag_success = false;
-      flag_swarm_too_close = false;
+      iteration_count_ = 0;
+      force_return = false;
+      force_stop_type_ = kDoNotStop;
+      still_unsafe = false;
+      success = false;
+      swarm_too_close = false;
 
       /* ---------- optimize ---------- */
       t1 = ros::Time::now();
       int result = lbfgs::lbfgs_optimize(
-          variable_num_,
+          variable_count_,
           x_init,
           &final_cost,
-          PolyTrajOptimizer::costFunctionCallback,
+          PolyTrajOptimizer::CostFunctionCallback,
           NULL,
-          PolyTrajOptimizer::earlyExitCallback,
+          PolyTrajOptimizer::EarlyExitCallback,
           this,
           &lbfgs_params);
 
       t2 = ros::Time::now();
-      double time_ms = (t2 - t1).toSec() * 1000;
-      double total_time_ms = (t2 - t0).toSec() * 1000;
+      double optimization_time_ms = (t2 - t1).toSec() * 1000;
+      double total_optimization_time_ms = (t2 - t0).toSec() * 1000;
 
       /* ---------- get result and check collision ---------- */
       if (result == lbfgs::LBFGS_CONVERGENCE ||
@@ -80,101 +80,101 @@ namespace diff_planner
           result == lbfgs::LBFGS_ALREADY_MINIMIZED ||
           result == lbfgs::LBFGS_STOP)
       {
-        flag_force_return = false;
+        force_return = false;
 
         /* double check: fine collision check */
-        std::vector<std::pair<int, int>> segments_nouse;
-        for (size_t i = 0; i < swarm_trajs_->size(); ++i)
+        std::vector<std::pair<int, int>> unused_segments;
+        for (size_t i = 0; i < swarm_trajectories_->size(); ++i)
         {
-          flag_swarm_too_close |= min_ellip_dist2_[i] < pow((swarm_clearance_ + swarm_trajs_->at(i).desired_clearance) * 1.25, 2);
+          swarm_too_close |= minimum_ellipsoid_distances_squared_[i] < pow((swarm_clearance_ + swarm_trajectories_->at(i).desired_clearance) * 1.25, 2);
         }
-        if (!flag_swarm_too_close)
+        if (!swarm_too_close)
         {
-          if (!checkDynamicFeasibility(jerkOpt_))
+          if (!CheckDynamicFeasibility(jerk_optimizer_))
           {
             // If infeasible, flag for another optimization attempt
-            flag_still_unsafe = true;
-            restart_nums++;
-            PRINTF_COND("\033[32miter=%d,time(ms)=%5.3f, Dynamic feasibility failed, keep optimizing\n\033[0m", iter_num_, time_ms);
+            still_unsafe = true;
+            restart_count++;
+            PRINTF_COND("\033[32miter=%d,time(ms)=%5.3f, Dynamic feasibility failed, keep optimizing\n\033[0m", iteration_count_, optimization_time_ms);
           }
-          else if (finelyCheckAndSetConstraintPoints(segments_nouse, jerkOpt_, false) == CHK_RET::OBS_FREE)
+          else if (FinelyCheckAndSetConstraintPoints(unused_segments, jerk_optimizer_, false) == CheckResult::kObstacleFree)
           {
 
-            flag_success = true;
-            PRINTF_COND("\033[32miter=%d,time(ms)=%5.3f,total_t(ms)=%5.3f,cost=%5.3f\n\033[0m", iter_num_, time_ms, total_time_ms, final_cost);
+            success = true;
+            PRINTF_COND("\033[32miter=%d,time(ms)=%5.3f,total_t(ms)=%5.3f,cost=%5.3f\n\033[0m", iteration_count_, optimization_time_ms, total_optimization_time_ms, final_cost);
           }
           else
           {
             // A not-blank return value means collision to obstales
-            flag_still_unsafe = true;
-            restart_nums++;
-            PRINTF_COND("\033[32miter=%d,time(ms)=%5.3f, fine check collided, keep optimizing\n\033[0m", iter_num_, time_ms);
+            still_unsafe = true;
+            restart_count++;
+            PRINTF_COND("\033[32miter=%d,time(ms)=%5.3f, fine check collided, keep optimizing\n\033[0m", iteration_count_, optimization_time_ms);
           }
         }
         else
         {
-          PRINTF_COND("Swarm clearance not satisfied, keep optimizing. iter=%d,time(ms)=%5.3f, wei_swarm_mod_=%f\n", iter_num_, time_ms, wei_swarm_mod_);
-          flag_still_unsafe = true;
-          restart_nums++;
-          wei_swarm_mod_ *= 2;
+          PRINTF_COND("Swarm clearance not satisfied, keep optimizing. iter=%d,time(ms)=%5.3f, wei_swarm_mod_=%f\n", iteration_count_, optimization_time_ms, modified_swarm_weight_);
+          still_unsafe = true;
+          restart_count++;
+          modified_swarm_weight_ *= 2;
         }
       }
       else if (result == lbfgs::LBFGSERR_CANCELED)
       {
-        flag_force_return = true;
-        rebound_times++;
-        PRINTF_COND("iter=%d, time(ms)=%f, rebound\n", iter_num_, time_ms);
+        force_return = true;
+        rebound_count++;
+        PRINTF_COND("iter=%d, time(ms)=%f, rebound\n", iteration_count_, optimization_time_ms);
       }
       else
       {
-        PRINTF_COND("iter=%d, time(ms)=%f, error\n", iter_num_, time_ms);
+        PRINTF_COND("iter=%d, time(ms)=%f, error\n", iteration_count_, optimization_time_ms);
         ROS_WARN_COND(VERBOSE_OUTPUT, "Solver error. Return = %d, %s. Skip this planning.", result, lbfgs::lbfgs_strerror(result));
       }
 
-    } while ((flag_still_unsafe && restart_nums < 3) ||
-             (flag_force_return && force_stop_type_ == STOP_FOR_REBOUND && rebound_times <= 20));
+    } while ((still_unsafe && restart_count < 3) ||
+             (force_return && force_stop_type_ == kStopForRebound && rebound_count <= 20));
 
-    return flag_success;
+    return success;
   }
-  bool PolyTrajOptimizer::checkDynamicFeasibility(const poly_traj::MinJerkOpt &pt_data)
+  bool PolyTrajOptimizer::CheckDynamicFeasibility(const poly_traj::MinJerkOpt &trajectory_optimizer)
   {
-    poly_traj::Trajectory traj = pt_data.GetTrajectory();
+    poly_traj::Trajectory traj = trajectory_optimizer.GetTrajectory();
     Eigen::VectorXd durations = traj.GetDurations();
-    const double RES = grid_map_->GetResolution(), RES_2 = RES / 2;
-    double t_step = min(RES / max_vel_, durations.minCoeff() / max(cps_num_prePiece_, 1) / 1.5);
-    double traj_duration = traj.GetTotalDuration();
+    const double resolution = grid_map_->GetResolution(), half_resolution = resolution / 2;
+    double time_step = min(resolution / max_velocity_, durations.minCoeff() / max(constraint_points_per_piece_, 1) / 1.5);
+    double trajectory_duration = traj.GetTotalDuration();
 
     // Iterate through the trajectory duration with the specified time step
-    for (double t = 0.0; t < traj_duration; t += t_step)
+    for (double t = 0.0; t < trajectory_duration; t += time_step)
     {
       // Check velocity constraint
       Eigen::Vector3d vel = traj.GetVelocity(t);
-      if (vel.norm() > max_vel_+ vel_tolerance_)
+      if (vel.norm() > max_velocity_+ velocity_tolerance_)
       {
         ROS_WARN_STREAM("Dynamic feasibility check failed: velocity limit exceeded at t="
-                        << t << ", |v|=" << vel.norm() << " > " << max_vel_ + 1.0);
+                        << t << ", |v|=" << vel.norm() << " > " << max_velocity_ + 1.0);
         return false; // Violation found
       }
 
       // Check acceleration constraint
       Eigen::Vector3d acc = traj.GetAcceleration(t);
-      if (acc.norm() > max_acc_ + acc_tolerance_)
+      if (acc.norm() > max_acceleration_ + acceleration_tolerance_)
       {
         ROS_WARN_STREAM("Dynamic feasibility check failed: acceleration limit exceeded at t="
-                        << t << ", |a|=" << acc.norm() << " > " << max_acc_ + 1.0);
+                        << t << ", |a|=" << acc.norm() << " > " << max_acceleration_ + 1.0);
         return false; // Violation found
       }
     }
 
     // Check the very last point
-    Eigen::Vector3d vel_end = traj.GetVelocity(traj_duration);
-    if (vel_end.norm() > max_vel_ + vel_tolerance_)
+    Eigen::Vector3d end_velocity = traj.GetVelocity(trajectory_duration);
+    if (end_velocity.norm() > max_velocity_ + velocity_tolerance_)
     {
       ROS_WARN_STREAM("Dynamic feasibility check failed: velocity limit exceeded at the end of trajectory.");
       return false;
     }
-    Eigen::Vector3d acc_end = traj.GetAcceleration(traj_duration);
-    if (acc_end.norm() > max_acc_ + acc_tolerance_)
+    Eigen::Vector3d end_acceleration = traj.GetAcceleration(trajectory_duration);
+    if (end_acceleration.norm() > max_acceleration_ + acceleration_tolerance_)
     {
       ROS_WARN_STREAM("Dynamic feasibility check failed: acceleration limit exceeded at the end of trajectory.");
       return false;
@@ -182,38 +182,38 @@ namespace diff_planner
 
     return true; // Trajectory is feasible
   }
-  bool PolyTrajOptimizer::computePointsToCheck(
+  bool PolyTrajOptimizer::ComputePointsToCheck(
       poly_traj::Trajectory &traj,
-      int id_cps_end, PointsToCheck &pts_check)
+      int end_index, PointsToCheck &points_to_check)
   {
-    pts_check.clear();
-    pts_check.resize(id_cps_end);
-    const double RES = grid_map_->GetResolution(), RES_2 = RES / 2;
+    points_to_check.clear();
+    points_to_check.resize(end_index);
+    const double resolution = grid_map_->GetResolution(), half_resolution = resolution / 2;
     Eigen::VectorXd durations = traj.GetDurations();
-    Eigen::VectorXd t_seg_start(durations.size() + 1);
-    t_seg_start(0) = 0;
+    Eigen::VectorXd segment_start_times(durations.size() + 1);
+    segment_start_times(0) = 0;
     for (int i = 0; i < durations.size(); ++i)
-      t_seg_start(i + 1) = t_seg_start(i) + durations(i);
-    const double DURATION = durations.sum();
-    double t = 0.0, t_step = min(RES / max_vel_, durations.minCoeff() / max(cps_num_prePiece_, 1) / 1.5);
-    Eigen::Vector3d pt_last = traj.GetPosition(0.0);
-    // pts_check[0].push_back(pt_last);
-    int id_cps_curr = 0, id_piece_curr = 0;
+      segment_start_times(i + 1) = segment_start_times(i) + durations(i);
+    const double total_duration = durations.sum();
+    double t = 0.0, time_step = min(resolution / max_velocity_, durations.minCoeff() / max(constraint_points_per_piece_, 1) / 1.5);
+    Eigen::Vector3d previous_point = traj.GetPosition(0.0);
+    // points_to_check[0].push_back(previous_point);
+    int current_control_point_index = 0, current_piece_index = 0;
 
     while (true)
     {
-      if (t > DURATION)
+      if (t > total_duration)
       {
-        if (touch_goal_ && pts_check.size() > 0)
+        if (touch_goal_ && points_to_check.size() > 0)
         {
-          while (pts_check.back().size() == 0)
+          while (points_to_check.back().size() == 0)
           {
-            pts_check.pop_back();
+            points_to_check.pop_back();
           }
 
-          if (pts_check.size() <= 0)
+          if (points_to_check.size() <= 0)
           {
-            ROS_ERROR("Failed to get points list to check (0x02). pts_check.size()=%d", (int)pts_check.size());
+            ROS_ERROR("Failed to get points list to check (0x02). pts_check.size()=%d", (int)points_to_check.size());
             return false;
           }
           else
@@ -223,114 +223,114 @@ namespace diff_planner
         }
         else
         {
-          ROS_ERROR("Failed to get points list to check (0x01). touch_goal_=%d, pts_check.size()=%d", touch_goal_, (int)pts_check.size());
-          pts_check.clear();
+          ROS_ERROR("Failed to get points list to check (0x01). touch_goal_=%d, pts_check.size()=%d", touch_goal_, (int)points_to_check.size());
+          points_to_check.clear();
           return false;
         }
       }
 
-      const double next_t_stp = t_seg_start(id_piece_curr) + durations(id_piece_curr) / cps_num_prePiece_ * ((id_cps_curr + 1) - cps_num_prePiece_ * id_piece_curr);
-      if (t >= next_t_stp)
+      const double next_time_step = segment_start_times(current_piece_index) + durations(current_piece_index) / constraint_points_per_piece_ * ((current_control_point_index + 1) - constraint_points_per_piece_ * current_piece_index);
+      if (t >= next_time_step)
       {
-        if (id_cps_curr + 1 >= cps_num_prePiece_ * (id_piece_curr + 1))
+        if (current_control_point_index + 1 >= constraint_points_per_piece_ * (current_piece_index + 1))
         {
-          ++id_piece_curr;
+          ++current_piece_index;
         }
-        if (++id_cps_curr >= id_cps_end)
+        if (++current_control_point_index >= end_index)
         {
           break;
         }
       }
 
       Eigen::Vector3d pt = traj.GetPosition(t);
-      if (t < 1e-5 || pts_check[id_cps_curr].size() == 0 || (pt - pt_last).cwiseAbs().maxCoeff() > RES_2)
+      if (t < 1e-5 || points_to_check[current_control_point_index].size() == 0 || (pt - previous_point).cwiseAbs().maxCoeff() > half_resolution)
       {
-        pts_check[id_cps_curr].emplace_back(std::pair<double, Eigen::Vector3d>(t, pt));
-        pt_last = pt;
+        points_to_check[current_control_point_index].emplace_back(std::pair<double, Eigen::Vector3d>(t, pt));
+        previous_point = pt;
       }
 
-      t += t_step;
+      t += time_step;
     }
 
     return true;
   }
 
   /* check collision and set {p,v} pairs to constrain points */
-  PolyTrajOptimizer::CHK_RET PolyTrajOptimizer::finelyCheckAndSetConstraintPoints(
+  PolyTrajOptimizer::CheckResult PolyTrajOptimizer::FinelyCheckAndSetConstraintPoints(
       std::vector<std::pair<int, int>> &segments,
-      const poly_traj::MinJerkOpt &pt_data,
-      const bool flag_first_init /*= true*/)
+      const poly_traj::MinJerkOpt &trajectory_optimizer,
+      const bool is_first_initialization /*= true*/)
   {
 
-    Eigen::MatrixXd init_points = pt_data.GetInitialConstraintPoints(cps_num_prePiece_);
-    poly_traj::Trajectory traj = pt_data.GetTrajectory();
+    Eigen::MatrixXd init_points = trajectory_optimizer.GetInitialConstraintPoints(constraint_points_per_piece_);
+    poly_traj::Trajectory traj = trajectory_optimizer.GetTrajectory();
 
-    if (flag_first_init)
+    if (is_first_initialization)
     {
-      cps_.resize_cp(init_points.cols());
-      cps_.points = init_points;
+      constraint_points_.Resize(init_points.cols());
+      constraint_points_.points_ = init_points;
     }
 
     /*** Segment the initial trajectory according to obstacles ***/
     vector<std::pair<int, int>> segment_ids;
-    constexpr int ENOUGH_INTERVAL = 2;
-    int in_id = -1, out_id = -1;
-    int same_occ_state_times = ENOUGH_INTERVAL + 1;
-    bool occ, last_occ = false;
-    bool flag_got_start = false, flag_got_end = false, flag_got_end_maybe = false;
-    int i_end = ConstraintPoints::two_thirds_id(init_points, touch_goal_); // only check closed 2/3 points.
+    constexpr int kEnoughInterval = 2;
+    int entry_index = -1, exit_index = -1;
+    int same_occupancy_count = kEnoughInterval + 1;
+    bool occ, previous_occupancy = false;
+    bool found_start = false, found_end = false, maybe_found_end = false;
+    int i_end = ConstraintPoints::TwoThirdsIndex(init_points, touch_goal_); // only check closed 2/3 points.
 
-    PointsToCheck pts_check;
-    if (!computePointsToCheck(traj, i_end, pts_check))
+    PointsToCheck points_to_check;
+    if (!ComputePointsToCheck(traj, i_end, points_to_check))
     {
-      return CHK_RET::ERR;
+      return CheckResult::kError;
     }
 
     for (int i = 0; i < i_end; ++i)
     {
-      for (size_t j = 0; j < pts_check[i].size(); ++j)
+      for (size_t j = 0; j < points_to_check[i].size(); ++j)
       {
-        occ = grid_map_->GetInflatedOccupancy(pts_check[i][j].second);
+        occ = grid_map_->GetInflatedOccupancy(points_to_check[i][j].second);
 
-        if (occ && !last_occ)
+        if (occ && !previous_occupancy)
         {
-          if (same_occ_state_times > ENOUGH_INTERVAL || i == 0)
+          if (same_occupancy_count > kEnoughInterval || i == 0)
           {
-            in_id = i;
-            flag_got_start = true;
+            entry_index = i;
+            found_start = true;
           }
-          same_occ_state_times = 0;
-          flag_got_end_maybe = false; // terminate in advance
+          same_occupancy_count = 0;
+          maybe_found_end = false; // terminate in advance
         }
-        else if (!occ && last_occ)
+        else if (!occ && previous_occupancy)
         {
-          out_id = i + 1;
-          flag_got_end_maybe = true;
-          same_occ_state_times = 0;
+          exit_index = i + 1;
+          maybe_found_end = true;
+          same_occupancy_count = 0;
         }
         else
         {
-          ++same_occ_state_times;
+          ++same_occupancy_count;
         }
 
-        if (flag_got_end_maybe && (same_occ_state_times > ENOUGH_INTERVAL || (i == i_end - 1)))
+        if (maybe_found_end && (same_occupancy_count > kEnoughInterval || (i == i_end - 1)))
         {
-          flag_got_end_maybe = false;
-          flag_got_end = true;
+          maybe_found_end = false;
+          found_end = true;
         }
 
-        last_occ = occ;
+        previous_occupancy = occ;
 
-        if (flag_got_start && flag_got_end)
+        if (found_start && found_end)
         {
-          flag_got_start = false;
-          flag_got_end = false;
-          if (in_id < 0 || out_id < 0)
+          found_start = false;
+          found_end = false;
+          if (entry_index < 0 || exit_index < 0)
           {
-            ROS_ERROR("Should not happen! in_id=%d, out_id=%d", in_id, out_id);
-            return CHK_RET::ERR;
+            ROS_ERROR("Should not happen! in_id=%d, out_id=%d", entry_index, exit_index);
+            return CheckResult::kError;
           }
-          segment_ids.push_back(std::pair<int, int>(in_id, out_id));
+          segment_ids.push_back(std::pair<int, int>(entry_index, exit_index));
         }
       }
     }
@@ -338,11 +338,11 @@ namespace diff_planner
     /* Collision free and return in advance */
     if (segment_ids.size() == 0)
     {
-      return CHK_RET::OBS_FREE;
+      return CheckResult::kObstacleFree;
     }
 
     /*** a star search ***/
-    vector<vector<Eigen::Vector3d>> a_star_pathes;
+    vector<vector<Eigen::Vector3d>> a_star_paths;
     for (size_t i = 0; i < segment_ids.size(); ++i)
     {
       // Search from back to head
@@ -350,9 +350,9 @@ namespace diff_planner
       AStarResult ret = a_star_->Search(grid_map_->GetResolution(), in, out);
       if (ret == AStarResult::kSuccess)
       {
-        a_star_pathes.push_back(a_star_->GetPath());
+        a_star_paths.push_back(a_star_->GetPath());
       }
-      else if (ret == AStarResult::kSearchError && i + 1 < segment_ids.size()) // connect the next segment
+      else if (ret == AStarResult::kSearchError && i + 1 < segment_ids.size()) // connect the next Segment
       {
         segment_ids[i].second = segment_ids[i + 1].second;
         segment_ids.erase(segment_ids.begin() + i + 1);
@@ -363,7 +363,7 @@ namespace diff_planner
       {
         ROS_WARN_COND(VERBOSE_OUTPUT, "A-star error, force return!");
         ROS_WARN("finelyCheck A-star error, force return!");
-        return CHK_RET::ERR;
+        return CheckResult::kError;
       }
     }
 
@@ -373,7 +373,7 @@ namespace diff_planner
     for (size_t i = 0; i < segment_ids.size(); i++)
     {
 
-      if (i == 0) // first segment
+      if (i == 0) // first Segment
       {
         id_low_bound = 1;
         if (segment_ids.size() > 1)
@@ -385,7 +385,7 @@ namespace diff_planner
           id_up_bound = init_points.cols() - 2;
         }
       }
-      else if (i == segment_ids.size() - 1) // last segment, i != 0 here
+      else if (i == segment_ids.size() - 1) // last Segment, i != 0 here
       {
         id_low_bound = (int)(((segment_ids[i].first + segment_ids[i - 1].second) + 1.0f) / 2); // id_low_bound : +1.0f ceil()
         id_up_bound = init_points.cols() - 2;
@@ -399,13 +399,13 @@ namespace diff_planner
       bounds[i] = std::pair<int, int>(id_low_bound, id_up_bound);
     }
 
-    /*** Adjust segment length ***/
+    /*** Adjust Segment length ***/
     vector<std::pair<int, int>> adjusted_segment_ids(segment_ids.size());
-    constexpr double MINIMUM_PERCENT = 0.0; // Each segment is guaranteed to have sufficient points to generate sufficient force
-    int minimum_points = round(init_points.cols() * MINIMUM_PERCENT), num_points;
+    constexpr double kMinimumPercent = 0.0; // Each Segment is guaranteed to have sufficient points to generate sufficient force
+    int minimum_points = round(init_points.cols() * kMinimumPercent), num_points;
     for (size_t i = 0; i < segment_ids.size(); i++)
     {
-      /*** Adjust segment length ***/
+      /*** Adjust Segment length ***/
       num_points = segment_ids[i].second - segment_ids[i].first + 1;
       if (num_points < minimum_points)
       {
@@ -439,63 +439,63 @@ namespace diff_planner
     // Used for return
     vector<std::pair<int, int>> final_segment_ids;
 
-    /*** Assign data to each segment ***/
+    /*** Assign data to each Segment ***/
     for (size_t i = 0; i < segment_ids.size(); i++)
     {
       // step 1
       for (int j = adjusted_segment_ids[i].first; j <= adjusted_segment_ids[i].second; ++j)
-        cps_.flag_temp[j] = false;
+        constraint_points_.temporary_flags_[j] = false;
 
       // step 2
-      int got_intersection_id = -1;
+      int intersection_index = -1;
       for (int j = segment_ids[i].first + 1; j < segment_ids[i].second; ++j)
       {
-        Eigen::Vector3d ctrl_pts_law(init_points.col(j + 1) - init_points.col(j - 1)), intersection_point;
-        int Astar_id = a_star_pathes[i].size() / 2, last_Astar_id; // Let "Astar_id = id_of_the_most_far_away_Astar_point" will be better, but it needs more computation
-        double val = (a_star_pathes[i][Astar_id] - init_points.col(j)).dot(ctrl_pts_law), init_val = val;
+        Eigen::Vector3d control_point_normal(init_points.col(j + 1) - init_points.col(j - 1)), intersection_point;
+        int a_star_index = a_star_paths[i].size() / 2, previous_a_star_index; // Let "a_star_index = farthest_a_star_point_index" will be better, but it needs more computation
+        double val = (a_star_paths[i][a_star_index] - init_points.col(j)).dot(control_point_normal), initial_value = val;
         while (true)
         {
 
-          last_Astar_id = Astar_id;
+          previous_a_star_index = a_star_index;
 
           if (val >= 0)
           {
-            ++Astar_id; // Previous Astar search from back to head
-            if (Astar_id >= (int)a_star_pathes[i].size())
+            ++a_star_index; // Previous Astar search from back to head
+            if (a_star_index >= (int)a_star_paths[i].size())
             {
               break;
             }
           }
           else
           {
-            --Astar_id;
-            if (Astar_id < 0)
+            --a_star_index;
+            if (a_star_index < 0)
             {
               break;
             }
           }
 
-          val = (a_star_pathes[i][Astar_id] - init_points.col(j)).dot(ctrl_pts_law);
+          val = (a_star_paths[i][a_star_index] - init_points.col(j)).dot(control_point_normal);
 
-          if (val * init_val <= 0 && (abs(val) > 0 || abs(init_val) > 0)) // val = init_val = 0.0 is not allowed
+          if (val * initial_value <= 0 && (abs(val) > 0 || abs(initial_value) > 0)) // val = initial_value = 0.0 is not allowed
           {
             intersection_point =
-                a_star_pathes[i][Astar_id] +
-                ((a_star_pathes[i][Astar_id] - a_star_pathes[i][last_Astar_id]) *
-                 (ctrl_pts_law.dot(init_points.col(j) - a_star_pathes[i][Astar_id]) / ctrl_pts_law.dot(a_star_pathes[i][Astar_id] - a_star_pathes[i][last_Astar_id])) // = t
+                a_star_paths[i][a_star_index] +
+                ((a_star_paths[i][a_star_index] - a_star_paths[i][previous_a_star_index]) *
+                 (control_point_normal.dot(init_points.col(j) - a_star_paths[i][a_star_index]) / control_point_normal.dot(a_star_paths[i][a_star_index] - a_star_paths[i][previous_a_star_index])) // = t
                 );
 
-            got_intersection_id = j;
+            intersection_index = j;
             break;
           }
         }
 
-        if (got_intersection_id >= 0)
+        if (intersection_index >= 0)
         {
           double length = (intersection_point - init_points.col(j)).norm();
           if (length > 1e-5)
           {
-            cps_.flag_temp[j] = true;
+            constraint_points_.temporary_flags_[j] = true;
             for (double a = length; a >= 0.0; a -= grid_map_->GetResolution())
             {
               bool occ = grid_map_->GetInflatedOccupancy((a / length) * intersection_point + (1 - a / length) * init_points.col(j));
@@ -504,65 +504,65 @@ namespace diff_planner
               {
                 if (occ)
                   a += grid_map_->GetResolution();
-                cps_.base_point[j].push_back((a / length) * intersection_point + (1 - a / length) * init_points.col(j));
-                cps_.direction[j].push_back((intersection_point - init_points.col(j)).normalized());
+                constraint_points_.base_points_[j].push_back((a / length) * intersection_point + (1 - a / length) * init_points.col(j));
+                constraint_points_.directions_[j].push_back((intersection_point - init_points.col(j)).normalized());
                 break;
               }
             }
           }
           else
           {
-            got_intersection_id = -1;
+            intersection_index = -1;
           }
         }
       }
 
-      /* Corner case: the segment length is too short. Here the control points may outside the A* path, leading to opposite gradient direction. So I have to take special care of it */
+      /* Corner case: the Segment length is too short. Here the control points may outside the A* path, leading to opposite gradient direction. So I have to take special care of it */
       if (segment_ids[i].second - segment_ids[i].first == 1)
       {
-        Eigen::Vector3d ctrl_pts_law(init_points.col(segment_ids[i].second) - init_points.col(segment_ids[i].first)), intersection_point;
+        Eigen::Vector3d control_point_normal(init_points.col(segment_ids[i].second) - init_points.col(segment_ids[i].first)), intersection_point;
         Eigen::Vector3d middle_point = (init_points.col(segment_ids[i].second) + init_points.col(segment_ids[i].first)) / 2;
-        int Astar_id = a_star_pathes[i].size() / 2, last_Astar_id; // Let "Astar_id = id_of_the_most_far_away_Astar_point" will be better, but it needs more computation
-        double val = (a_star_pathes[i][Astar_id] - middle_point).dot(ctrl_pts_law), init_val = val;
+        int a_star_index = a_star_paths[i].size() / 2, previous_a_star_index; // Let "a_star_index = farthest_a_star_point_index" will be better, but it needs more computation
+        double val = (a_star_paths[i][a_star_index] - middle_point).dot(control_point_normal), initial_value = val;
         while (true)
         {
 
-          last_Astar_id = Astar_id;
+          previous_a_star_index = a_star_index;
 
           if (val >= 0)
           {
-            ++Astar_id; // Previous Astar search from back to head
-            if (Astar_id >= (int)a_star_pathes[i].size())
+            ++a_star_index; // Previous Astar search from back to head
+            if (a_star_index >= (int)a_star_paths[i].size())
             {
               break;
             }
           }
           else
           {
-            --Astar_id;
-            if (Astar_id < 0)
+            --a_star_index;
+            if (a_star_index < 0)
             {
               break;
             }
           }
 
-          val = (a_star_pathes[i][Astar_id] - middle_point).dot(ctrl_pts_law);
+          val = (a_star_paths[i][a_star_index] - middle_point).dot(control_point_normal);
 
-          if (val * init_val <= 0 && (abs(val) > 0 || abs(init_val) > 0)) // val = init_val = 0.0 is not allowed
+          if (val * initial_value <= 0 && (abs(val) > 0 || abs(initial_value) > 0)) // val = initial_value = 0.0 is not allowed
           {
             intersection_point =
-                a_star_pathes[i][Astar_id] +
-                ((a_star_pathes[i][Astar_id] - a_star_pathes[i][last_Astar_id]) *
-                 (ctrl_pts_law.dot(middle_point - a_star_pathes[i][Astar_id]) / ctrl_pts_law.dot(a_star_pathes[i][Astar_id] - a_star_pathes[i][last_Astar_id])) // = t
+                a_star_paths[i][a_star_index] +
+                ((a_star_paths[i][a_star_index] - a_star_paths[i][previous_a_star_index]) *
+                 (control_point_normal.dot(middle_point - a_star_paths[i][a_star_index]) / control_point_normal.dot(a_star_paths[i][a_star_index] - a_star_paths[i][previous_a_star_index])) // = t
                 );
 
             if ((intersection_point - middle_point).norm() > 0.01) // 1cm.
             {
-              cps_.flag_temp[segment_ids[i].first] = true;
-              cps_.base_point[segment_ids[i].first].push_back(init_points.col(segment_ids[i].first));
-              cps_.direction[segment_ids[i].first].push_back((intersection_point - middle_point).normalized());
+              constraint_points_.temporary_flags_[segment_ids[i].first] = true;
+              constraint_points_.base_points_[segment_ids[i].first].push_back(init_points.col(segment_ids[i].first));
+              constraint_points_.directions_[segment_ids[i].first].push_back((intersection_point - middle_point).normalized());
 
-              got_intersection_id = segment_ids[i].first;
+              intersection_index = segment_ids[i].first;
             }
             break;
           }
@@ -570,20 +570,20 @@ namespace diff_planner
       }
 
       //step 3
-      if (got_intersection_id >= 0)
+      if (intersection_index >= 0)
       {
-        for (int j = got_intersection_id + 1; j <= adjusted_segment_ids[i].second; ++j)
-          if (!cps_.flag_temp[j])
+        for (int j = intersection_index + 1; j <= adjusted_segment_ids[i].second; ++j)
+          if (!constraint_points_.temporary_flags_[j])
           {
-            cps_.base_point[j].push_back(cps_.base_point[j - 1].back());
-            cps_.direction[j].push_back(cps_.direction[j - 1].back());
+            constraint_points_.base_points_[j].push_back(constraint_points_.base_points_[j - 1].back());
+            constraint_points_.directions_[j].push_back(constraint_points_.directions_[j - 1].back());
           }
 
-        for (int j = got_intersection_id - 1; j >= adjusted_segment_ids[i].first; --j)
-          if (!cps_.flag_temp[j])
+        for (int j = intersection_index - 1; j >= adjusted_segment_ids[i].first; --j)
+          if (!constraint_points_.temporary_flags_[j])
           {
-            cps_.base_point[j].push_back(cps_.base_point[j + 1].back());
-            cps_.direction[j].push_back(cps_.direction[j + 1].back());
+            constraint_points_.base_points_[j].push_back(constraint_points_.base_points_[j + 1].back());
+            constraint_points_.directions_[j].push_back(constraint_points_.directions_[j + 1].back());
           }
 
         final_segment_ids.push_back(adjusted_segment_ids[i]);
@@ -596,30 +596,30 @@ namespace diff_planner
     }
 
     segments = final_segment_ids;
-    return CHK_RET::FINISH;
+    return CheckResult::kFinished;
   }
 
-  bool PolyTrajOptimizer::roughlyCheckConstraintPoints(void)
+  bool PolyTrajOptimizer::RoughlyCheckConstraintPoints(void)
   {
 
-    // int end_idx = cps_.cp_size - 1;
+    // int end_idx = constraint_points_.control_point_count_ - 1;
 
-    /*** Check and segment the initial trajectory according to obstacles ***/
-    int in_id, out_id;
+    /*** Check and Segment the initial trajectory according to obstacles ***/
+    int entry_index, exit_index;
     vector<std::pair<int, int>> segment_ids;
-    bool flag_new_obs_valid = false;
-    int i_end = ConstraintPoints::two_thirds_id(cps_.points, touch_goal_); // only check closed 2/3 points.
+    bool new_obstacle_valid = false;
+    int i_end = ConstraintPoints::TwoThirdsIndex(constraint_points_.points_, touch_goal_); // only check closed 2/3 points.
     for (int i = 1; i <= i_end; ++i)
     {
 
-      bool occ = grid_map_->GetInflatedOccupancy(cps_.points.col(i));
+      bool occ = grid_map_->GetInflatedOccupancy(constraint_points_.points_.col(i));
 
       /*** check if the new collision will be valid ***/
       if (occ)
       {
-        for (size_t k = 0; k < cps_.direction[i].size(); ++k)
+        for (size_t k = 0; k < constraint_points_.directions_[i].size(); ++k)
         {
-          if ((cps_.points.col(i) - cps_.base_point[i][k]).dot(cps_.direction[i][k]) < 1 * grid_map_->GetResolution()) // current point is outside all the collision_points.
+          if ((constraint_points_.points_.col(i) - constraint_points_.base_points_[i][k]).dot(constraint_points_.directions_[i][k]) < 1 * grid_map_->GetResolution()) // current point is outside all the collision_points.
           {
             occ = false;
             break;
@@ -629,61 +629,61 @@ namespace diff_planner
 
       if (occ)
       {
-        flag_new_obs_valid = true;
+        new_obstacle_valid = true;
 
         int j;
         for (j = i - 1; j >= 0; --j)
         {
-          occ = grid_map_->GetInflatedOccupancy(cps_.points.col(j));
+          occ = grid_map_->GetInflatedOccupancy(constraint_points_.points_.col(j));
           if (!occ)
           {
-            in_id = j;
+            entry_index = j;
             break;
           }
         }
         if (j < 0) // fail to get the obs free point
         {
           ROS_ERROR("The drone is in obstacle. It means a crash in real-world.");
-          in_id = 0;
+          entry_index = 0;
         }
 
-        for (j = i + 1; j < cps_.cp_size; ++j)
+        for (j = i + 1; j < constraint_points_.control_point_count_; ++j)
         {
-          occ = grid_map_->GetInflatedOccupancy(cps_.points.col(j));
+          occ = grid_map_->GetInflatedOccupancy(constraint_points_.points_.col(j));
 
           if (!occ)
           {
-            out_id = j;
+            exit_index = j;
             break;
           }
         }
-        if (j >= cps_.cp_size) // fail to get the obs free point
+        if (j >= constraint_points_.control_point_count_) // fail to get the obs free point
         {
           ROS_WARN("Local target in collision, skip this planning.");
 
-          force_stop_type_ = STOP_FOR_ERROR;
+          force_stop_type_ = kStopForError;
           return false;
         }
 
         i = j + 1;
 
-        segment_ids.push_back(std::pair<int, int>(in_id, out_id));
+        segment_ids.push_back(std::pair<int, int>(entry_index, exit_index));
       }
     }
 
-    if (flag_new_obs_valid)
+    if (new_obstacle_valid)
     {
-      vector<vector<Eigen::Vector3d>> a_star_pathes;
+      vector<vector<Eigen::Vector3d>> a_star_paths;
       for (size_t i = 0; i < segment_ids.size(); ++i)
       {
         /*** a star search ***/
-        Eigen::Vector3d in(cps_.points.col(segment_ids[i].second)), out(cps_.points.col(segment_ids[i].first));
+        Eigen::Vector3d in(constraint_points_.points_.col(segment_ids[i].second)), out(constraint_points_.points_.col(segment_ids[i].first));
         AStarResult ret = a_star_->Search(/*(in-out).norm()/10+0.05*/ grid_map_->GetResolution(), in, out);
         if (ret == AStarResult::kSuccess)
         {
-          a_star_pathes.push_back(a_star_->GetPath());
+          a_star_paths.push_back(a_star_->GetPath());
         }
-        else if (ret == AStarResult::kSearchError && i + 1 < segment_ids.size()) // connect the next segment
+        else if (ret == AStarResult::kSearchError && i + 1 < segment_ids.size()) // connect the next Segment
         {
           segment_ids[i].second = segment_ids[i + 1].second;
           segment_ids.erase(segment_ids.begin() + i + 1);
@@ -708,123 +708,123 @@ namespace diff_planner
         }
       }
 
-      /*** Assign parameters to each segment ***/
+      /*** Assign parameters to each Segment ***/
       for (size_t i = 0; i < segment_ids.size(); ++i)
       {
         // step 1
         for (int j = segment_ids[i].first; j <= segment_ids[i].second; ++j)
-          cps_.flag_temp[j] = false;
+          constraint_points_.temporary_flags_[j] = false;
 
         // step 2
-        int got_intersection_id = -1;
+        int intersection_index = -1;
         for (int j = segment_ids[i].first + 1; j < segment_ids[i].second; ++j)
         {
-          Eigen::Vector3d ctrl_pts_law(cps_.points.col(j + 1) - cps_.points.col(j - 1)), intersection_point;
-          int Astar_id = a_star_pathes[i].size() / 2, last_Astar_id; // Let "Astar_id = id_of_the_most_far_away_Astar_point" will be better, but it needs more computation
-          double val = (a_star_pathes[i][Astar_id] - cps_.points.col(j)).dot(ctrl_pts_law), init_val = val;
+          Eigen::Vector3d control_point_normal(constraint_points_.points_.col(j + 1) - constraint_points_.points_.col(j - 1)), intersection_point;
+          int a_star_index = a_star_paths[i].size() / 2, previous_a_star_index; // Let "a_star_index = farthest_a_star_point_index" will be better, but it needs more computation
+          double val = (a_star_paths[i][a_star_index] - constraint_points_.points_.col(j)).dot(control_point_normal), initial_value = val;
           while (true)
           {
 
-            last_Astar_id = Astar_id;
+            previous_a_star_index = a_star_index;
 
             if (val >= 0)
             {
-              ++Astar_id; // Previous Astar search from back to head
-              if (Astar_id >= (int)a_star_pathes[i].size())
+              ++a_star_index; // Previous Astar search from back to head
+              if (a_star_index >= (int)a_star_paths[i].size())
               {
                 break;
               }
             }
             else
             {
-              --Astar_id;
-              if (Astar_id < 0)
+              --a_star_index;
+              if (a_star_index < 0)
               {
                 break;
               }
             }
 
-            val = (a_star_pathes[i][Astar_id] - cps_.points.col(j)).dot(ctrl_pts_law);
+            val = (a_star_paths[i][a_star_index] - constraint_points_.points_.col(j)).dot(control_point_normal);
 
-            if (val * init_val <= 0 && (abs(val) > 0 || abs(init_val) > 0)) // val = init_val = 0.0 is not allowed
+            if (val * initial_value <= 0 && (abs(val) > 0 || abs(initial_value) > 0)) // val = initial_value = 0.0 is not allowed
             {
               intersection_point =
-                  a_star_pathes[i][Astar_id] +
-                  ((a_star_pathes[i][Astar_id] - a_star_pathes[i][last_Astar_id]) *
-                   (ctrl_pts_law.dot(cps_.points.col(j) - a_star_pathes[i][Astar_id]) / ctrl_pts_law.dot(a_star_pathes[i][Astar_id] - a_star_pathes[i][last_Astar_id])) // = t
+                  a_star_paths[i][a_star_index] +
+                  ((a_star_paths[i][a_star_index] - a_star_paths[i][previous_a_star_index]) *
+                   (control_point_normal.dot(constraint_points_.points_.col(j) - a_star_paths[i][a_star_index]) / control_point_normal.dot(a_star_paths[i][a_star_index] - a_star_paths[i][previous_a_star_index])) // = t
                   );
 
-              got_intersection_id = j;
+              intersection_index = j;
               break;
             }
           }
 
-          if (got_intersection_id >= 0)
+          if (intersection_index >= 0)
           {
-            double length = (intersection_point - cps_.points.col(j)).norm();
+            double length = (intersection_point - constraint_points_.points_.col(j)).norm();
             if (length > 1e-5)
             {
-              cps_.flag_temp[j] = true;
+              constraint_points_.temporary_flags_[j] = true;
               for (double a = length; a >= 0.0; a -= grid_map_->GetResolution())
               {
-                bool occ = grid_map_->GetInflatedOccupancy((a / length) * intersection_point + (1 - a / length) * cps_.points.col(j));
+                bool occ = grid_map_->GetInflatedOccupancy((a / length) * intersection_point + (1 - a / length) * constraint_points_.points_.col(j));
 
                 if (occ || a < grid_map_->GetResolution())
                 {
                   if (occ)
                     a += grid_map_->GetResolution();
-                  cps_.base_point[j].push_back((a / length) * intersection_point + (1 - a / length) * cps_.points.col(j));
-                  cps_.direction[j].push_back((intersection_point - cps_.points.col(j)).normalized());
+                  constraint_points_.base_points_[j].push_back((a / length) * intersection_point + (1 - a / length) * constraint_points_.points_.col(j));
+                  constraint_points_.directions_[j].push_back((intersection_point - constraint_points_.points_.col(j)).normalized());
                   break;
                 }
               }
             }
             else
             {
-              got_intersection_id = -1;
+              intersection_index = -1;
             }
           }
         }
 
         //step 3
-        if (got_intersection_id >= 0)
+        if (intersection_index >= 0)
         {
-          for (int j = got_intersection_id + 1; j <= segment_ids[i].second; ++j)
-            if (!cps_.flag_temp[j])
+          for (int j = intersection_index + 1; j <= segment_ids[i].second; ++j)
+            if (!constraint_points_.temporary_flags_[j])
             {
-              cps_.base_point[j].push_back(cps_.base_point[j - 1].back());
-              cps_.direction[j].push_back(cps_.direction[j - 1].back());
+              constraint_points_.base_points_[j].push_back(constraint_points_.base_points_[j - 1].back());
+              constraint_points_.directions_[j].push_back(constraint_points_.directions_[j - 1].back());
             }
 
-          for (int j = got_intersection_id - 1; j >= segment_ids[i].first; --j)
-            if (!cps_.flag_temp[j])
+          for (int j = intersection_index - 1; j >= segment_ids[i].first; --j)
+            if (!constraint_points_.temporary_flags_[j])
             {
-              cps_.base_point[j].push_back(cps_.base_point[j + 1].back());
-              cps_.direction[j].push_back(cps_.direction[j + 1].back());
+              constraint_points_.base_points_[j].push_back(constraint_points_.base_points_[j + 1].back());
+              constraint_points_.directions_[j].push_back(constraint_points_.directions_[j + 1].back());
             }
         }
         else
           ROS_WARN_COND(VERBOSE_OUTPUT, "Failed to generate direction. It doesn't matter.");
       }
 
-      force_stop_type_ = STOP_FOR_REBOUND;
+      force_stop_type_ = kStopForRebound;
       return true;
     }
 
     return false;
   }
 
-  bool PolyTrajOptimizer::allowRebound(void) //zxzxzx
+  bool PolyTrajOptimizer::AllowRebound(void) //zxzxzx
   {
     // criterion 1
-    if (iter_num_ < 3)
+    if (iteration_count_ < 3)
       return false;
 
     // criterion 2
     double min_product = 1;
-    for (int i = 3; i <= cps_.points.cols() - 4; ++i) // ignore head and tail
+    for (int i = 3; i <= constraint_points_.points_.cols() - 4; ++i) // ignore head and tail
     {
-      double product = ((cps_.points.col(i) - cps_.points.col(i - 1)).normalized()).dot((cps_.points.col(i + 1) - cps_.points.col(i)).normalized());
+      double product = ((constraint_points_.points_.col(i) - constraint_points_.points_.col(i - 1)).normalized()).dot((constraint_points_.points_.col(i + 1) - constraint_points_.points_.col(i)).normalized());
       if (product < min_product)
       {
         min_product = product;
@@ -834,17 +834,17 @@ namespace diff_planner
       return false;
 
     // criterion 3
-    if (multitopology_data_.use_multitopology_trajs)
+    if (multi_topology_data_.use_multi_topology_trajectories)
     {
-      if (!multitopology_data_.initial_obstacles_avoided)
+      if (!multi_topology_data_.initial_obstacles_avoided)
       {
         bool avoided = true;
-        for (int i = 1; i < cps_.points.cols() - 1; ++i)
+        for (int i = 1; i < constraint_points_.points_.cols() - 1; ++i)
         {
-          if (cps_.base_point[i].size() > 0)
+          if (constraint_points_.base_points_[i].size() > 0)
           {
-            // Only adopts "0" since finelyCheckAndSetConstraintPoints() after one optimization can add more base_points.
-            if ((cps_.points.col(i) - cps_.base_point[i][0]).dot(cps_.direction[i][0]) < 0)
+            // Only adopts "0" since FinelyCheckAndSetConstraintPoints() after one optimization can add more base_points.
+            if ((constraint_points_.points_.col(i) - constraint_points_.base_points_[i][0]).dot(constraint_points_.directions_[i][0]) < 0)
             {
               avoided = false;
               break;
@@ -852,10 +852,10 @@ namespace diff_planner
           }
         }
 
-        multitopology_data_.initial_obstacles_avoided = avoided;
+        multi_topology_data_.initial_obstacles_avoided = avoided;
       }
 
-      if (!multitopology_data_.initial_obstacles_avoided)
+      if (!multi_topology_data_.initial_obstacles_avoided)
       {
         return false;
       }
@@ -866,49 +866,49 @@ namespace diff_planner
   }
 
   /* multi-topo support */
-  std::vector<ConstraintPoints> PolyTrajOptimizer::distinctiveTrajs(vector<std::pair<int, int>> segments)
+  std::vector<ConstraintPoints> PolyTrajOptimizer::GenerateDistinctiveTrajectories(vector<std::pair<int, int>> segments)
   {
     if (segments.size() == 0) // will be invoked again later.
     {
-      std::vector<ConstraintPoints> oneSeg;
-      oneSeg.push_back(cps_);
-      return oneSeg;
+      std::vector<ConstraintPoints> segment_info;
+      segment_info.push_back(constraint_points_);
+      return segment_info;
     }
 
-    constexpr int MAX_TRAJS = 8;
-    constexpr int VARIS = 2;
-    int seg_upbound = std::min((int)segments.size(), static_cast<int>(floor(log(MAX_TRAJS) / log(VARIS))));
-    std::vector<ConstraintPoints> control_pts_buf;
-    control_pts_buf.reserve(MAX_TRAJS);
-    const double RESOLUTION = grid_map_->GetResolution();
-    const double CTRL_PT_DIST = (cps_.points.col(0) - cps_.points.col(cps_.cp_size - 1)).norm() / (cps_.cp_size - 1);
+    constexpr int kMaxTrajectories = 8;
+    constexpr int kVariationCount = 2;
+    int segment_count = std::min((int)segments.size(), static_cast<int>(floor(log(kMaxTrajectories) / log(kVariationCount))));
+    std::vector<ConstraintPoints> control_point_candidates;
+    control_point_candidates.reserve(kMaxTrajectories);
+    const double resolution = grid_map_->GetResolution();
+    const double control_point_distance = (constraint_points_.points_.col(0) - constraint_points_.points_.col(constraint_points_.control_point_count_ - 1)).norm() / (constraint_points_.control_point_count_ - 1);
 
-    // Step 1. Find the opposite vectors and base points for every segment.
-    std::vector<std::pair<ConstraintPoints, ConstraintPoints>> RichInfoSegs;
-    for (int i = 0; i < seg_upbound; i++)
+    // Step 1. Find the opposite vectors and base points for every Segment.
+    std::vector<std::pair<ConstraintPoints, ConstraintPoints>> rich_segment_info;
+    for (int i = 0; i < segment_count; i++)
     {
-      std::pair<ConstraintPoints, ConstraintPoints> RichInfoOneSeg;
-      ConstraintPoints RichInfoOneSeg_temp;
-      cps_.segment(RichInfoOneSeg_temp, segments[i].first, segments[i].second);
-      RichInfoOneSeg.first = RichInfoOneSeg_temp;
-      RichInfoOneSeg.second = RichInfoOneSeg_temp;
-      RichInfoSegs.push_back(RichInfoOneSeg);
+      std::pair<ConstraintPoints, ConstraintPoints> segment_info;
+      ConstraintPoints temporary_segment_info;
+      constraint_points_.Segment(temporary_segment_info, segments[i].first, segments[i].second);
+      segment_info.first = temporary_segment_info;
+      segment_info.second = temporary_segment_info;
+      rich_segment_info.push_back(segment_info);
     }
 
-    for (int i = 0; i < seg_upbound; i++)
+    for (int i = 0; i < segment_count; i++)
     {
 
       // 1.1 Find the start occupied point id and the last occupied point id
-      if (RichInfoSegs[i].first.cp_size > 1)
+      if (rich_segment_info[i].first.control_point_count_ > 1)
       {
         int occ_start_id = -1, occ_end_id = -1;
         Eigen::Vector3d occ_start_pt, occ_end_pt;
-        for (int j = 0; j < RichInfoSegs[i].first.cp_size - 1; j++)
+        for (int j = 0; j < rich_segment_info[i].first.control_point_count_ - 1; j++)
         {
-          double step_size = RESOLUTION / (RichInfoSegs[i].first.points.col(j) - RichInfoSegs[i].first.points.col(j + 1)).norm() / 2;
+          double step_size = resolution / (rich_segment_info[i].first.points_.col(j) - rich_segment_info[i].first.points_.col(j + 1)).norm() / 2;
           for (double a = 1; a > 0; a -= step_size)
           {
-            Eigen::Vector3d pt(a * RichInfoSegs[i].first.points.col(j) + (1 - a) * RichInfoSegs[i].first.points.col(j + 1));
+            Eigen::Vector3d pt(a * rich_segment_info[i].first.points_.col(j) + (1 - a) * rich_segment_info[i].first.points_.col(j + 1));
             if (grid_map_->GetInflatedOccupancy(pt))
             {
               occ_start_id = j;
@@ -918,13 +918,13 @@ namespace diff_planner
           }
         }
       exit_multi_loop1:;
-        for (int j = RichInfoSegs[i].first.cp_size - 1; j >= 1; j--)
+        for (int j = rich_segment_info[i].first.control_point_count_ - 1; j >= 1; j--)
         {
           ;
-          double step_size = RESOLUTION / (RichInfoSegs[i].first.points.col(j) - RichInfoSegs[i].first.points.col(j - 1)).norm();
+          double step_size = resolution / (rich_segment_info[i].first.points_.col(j) - rich_segment_info[i].first.points_.col(j - 1)).norm();
           for (double a = 1; a > 0; a -= step_size)
           {
-            Eigen::Vector3d pt(a * RichInfoSegs[i].first.points.col(j) + (1 - a) * RichInfoSegs[i].first.points.col(j - 1));
+            Eigen::Vector3d pt(a * rich_segment_info[i].first.points_.col(j) + (1 - a) * rich_segment_info[i].first.points_.col(j - 1));
             if (grid_map_->GetInflatedOccupancy(pt))
             {
               occ_end_id = j;
@@ -938,12 +938,12 @@ namespace diff_planner
         // double check
         if (occ_start_id == -1 || occ_end_id == -1)
         {
-          // It means that the first or the last control points of one segment are in obstacles, which is not allowed.
+          // It means that the first or the last control points of one Segment are in obstacles, which is not allowed.
           // ROS_WARN("What? occ_start_id=%d, occ_end_id=%d", occ_start_id, occ_end_id);
 
           segments.erase(segments.begin() + i);
-          RichInfoSegs.erase(RichInfoSegs.begin() + i);
-          seg_upbound--;
+          rich_segment_info.erase(rich_segment_info.begin() + i);
+          segment_count--;
           i--;
 
           continue;
@@ -952,23 +952,23 @@ namespace diff_planner
         // 1.2 Reverse the vector and find new base points from occ_start_id to occ_end_id.
         for (int j = occ_start_id; j <= occ_end_id; j++)
         {
-          Eigen::Vector3d base_pt_reverse, base_vec_reverse;
-          if (RichInfoSegs[i].first.base_point[j].size() != 1)
+          Eigen::Vector3d reverse_base_point, reverse_base_vector;
+          if (rich_segment_info[i].first.base_points_[j].size() != 1)
           {
-            cout << "RichInfoSegs[" << i << "].first.base_point[" << j << "].size()=" << RichInfoSegs[i].first.base_point[j].size() << endl;
+            cout << "RichInfoSegs[" << i << "].first.base_point[" << j << "].size()=" << rich_segment_info[i].first.base_points_[j].size() << endl;
             ROS_ERROR("Wrong number of base_points!!! Should not be happen!.");
 
             cout << setprecision(5);
             cout << "cps_" << endl;
-            cout << " clearance=" << obs_clearance_ << " cps.size=" << cps_.cp_size << endl;
-            for (int temp_i = 0; temp_i < cps_.cp_size; temp_i++)
+            cout << " clearance=" << obstacle_clearance_ << " cps.size=" << constraint_points_.control_point_count_ << endl;
+            for (int temp_i = 0; temp_i < constraint_points_.control_point_count_; temp_i++)
             {
-              if (cps_.base_point[temp_i].size() > 1 && cps_.base_point[temp_i].size() < 1000)
+              if (constraint_points_.base_points_[temp_i].size() > 1 && constraint_points_.base_points_[temp_i].size() < 1000)
               {
                 ROS_ERROR("Should not happen!!!");
-                cout << "######" << cps_.points.col(temp_i).transpose() << endl;
-                for (size_t temp_j = 0; temp_j < cps_.base_point[temp_i].size(); temp_j++)
-                  cout << "      " << cps_.base_point[temp_i][temp_j].transpose() << " @ " << cps_.direction[temp_i][temp_j].transpose() << endl;
+                cout << "######" << constraint_points_.points_.col(temp_i).transpose() << endl;
+                for (size_t temp_j = 0; temp_j < constraint_points_.base_points_[temp_i].size(); temp_j++)
+                  cout << "      " << constraint_points_.base_points_[temp_i][temp_j].transpose() << " @ " << constraint_points_.directions_[temp_i][temp_j].transpose() << endl;
               }
             }
 
@@ -976,80 +976,80 @@ namespace diff_planner
             return blank;
           }
 
-          base_vec_reverse = -RichInfoSegs[i].first.direction[j][0];
+          reverse_base_vector = -rich_segment_info[i].first.directions_[j][0];
 
           // The start and the end case must get taken special care of.
           if (j == occ_start_id)
           {
-            base_pt_reverse = occ_start_pt;
+            reverse_base_point = occ_start_pt;
           }
           else if (j == occ_end_id)
           {
-            base_pt_reverse = occ_end_pt;
+            reverse_base_point = occ_end_pt;
           }
           else
           {
-            base_pt_reverse = RichInfoSegs[i].first.points.col(j) + base_vec_reverse * (RichInfoSegs[i].first.base_point[j][0] - RichInfoSegs[i].first.points.col(j)).norm();
+            reverse_base_point = rich_segment_info[i].first.points_.col(j) + reverse_base_vector * (rich_segment_info[i].first.base_points_[j][0] - rich_segment_info[i].first.points_.col(j)).norm();
           }
 
-          if (grid_map_->GetInflatedOccupancy(base_pt_reverse)) // Search outward.
+          if (grid_map_->GetInflatedOccupancy(reverse_base_point)) // Search outward.
           {
-            double l_upbound = 5 * CTRL_PT_DIST; // "5" is the threshold.
-            double l = RESOLUTION;
-            for (; l <= l_upbound; l += RESOLUTION)
+            double search_limit = 5 * control_point_distance; // "5" is the threshold.
+            double l = resolution;
+            for (; l <= search_limit; l += resolution)
             {
-              Eigen::Vector3d base_pt_temp = base_pt_reverse + l * base_vec_reverse;
-              if (!grid_map_->GetInflatedOccupancy(base_pt_temp))
+              Eigen::Vector3d temporary_base_point = reverse_base_point + l * reverse_base_vector;
+              if (!grid_map_->GetInflatedOccupancy(temporary_base_point))
               {
-                RichInfoSegs[i].second.base_point[j][0] = base_pt_temp;
-                RichInfoSegs[i].second.direction[j][0] = base_vec_reverse;
+                rich_segment_info[i].second.base_points_[j][0] = temporary_base_point;
+                rich_segment_info[i].second.directions_[j][0] = reverse_base_vector;
                 break;
               }
             }
-            if (l > l_upbound)
+            if (l > search_limit)
             {
               ROS_WARN_COND(VERBOSE_OUTPUT, "Can't find the new base points at the opposite within the threshold. i=%d, j=%d", i, j);
 
               segments.erase(segments.begin() + i);
-              RichInfoSegs.erase(RichInfoSegs.begin() + i);
-              seg_upbound--;
+              rich_segment_info.erase(rich_segment_info.begin() + i);
+              segment_count--;
               i--;
 
-              goto exit_multi_loop3; // break "for (int j = 0; j < RichInfoSegs[i].first.size; j++)"
+              goto exit_multi_loop3; // break "for (int j = 0; j < rich_segment_info[i].first.size; j++)"
             }
           }
-          else if ((base_pt_reverse - RichInfoSegs[i].first.points.col(j)).norm() >= RESOLUTION) // Unnecessary to search.
+          else if ((reverse_base_point - rich_segment_info[i].first.points_.col(j)).norm() >= resolution) // Unnecessary to search.
           {
-            RichInfoSegs[i].second.base_point[j][0] = base_pt_reverse;
-            RichInfoSegs[i].second.direction[j][0] = base_vec_reverse;
+            rich_segment_info[i].second.base_points_[j][0] = reverse_base_point;
+            rich_segment_info[i].second.directions_[j][0] = reverse_base_vector;
           }
           else
           {
             ROS_WARN_COND(VERBOSE_OUTPUT, "base_point and control point are too close!");
             if (VERBOSE_OUTPUT)
-              cout << "base_point=" << RichInfoSegs[i].first.base_point[j][0].transpose() << " control point=" << RichInfoSegs[i].first.points.col(j).transpose() << endl;
+              cout << "base_point=" << rich_segment_info[i].first.base_points_[j][0].transpose() << " control point=" << rich_segment_info[i].first.points_.col(j).transpose() << endl;
 
             segments.erase(segments.begin() + i);
-            RichInfoSegs.erase(RichInfoSegs.begin() + i);
-            seg_upbound--;
+            rich_segment_info.erase(rich_segment_info.begin() + i);
+            segment_count--;
             i--;
 
-            goto exit_multi_loop3; // break "for (int j = 0; j < RichInfoSegs[i].first.size; j++)"
+            goto exit_multi_loop3; // break "for (int j = 0; j < rich_segment_info[i].first.size; j++)"
           }
         }
 
-        // 1.3 Assign the base points to control points within [0, occ_start_id) and (occ_end_id, RichInfoSegs[i].first.size()-1].
-        if (RichInfoSegs[i].second.cp_size)
+        // 1.3 Assign the base points to control points within [0, occ_start_id) and (occ_end_id, rich_segment_info[i].first.size()-1].
+        if (rich_segment_info[i].second.control_point_count_)
         {
           for (int j = occ_start_id - 1; j >= 0; j--)
           {
-            RichInfoSegs[i].second.base_point[j][0] = RichInfoSegs[i].second.base_point[occ_start_id][0];
-            RichInfoSegs[i].second.direction[j][0] = RichInfoSegs[i].second.direction[occ_start_id][0];
+            rich_segment_info[i].second.base_points_[j][0] = rich_segment_info[i].second.base_points_[occ_start_id][0];
+            rich_segment_info[i].second.directions_[j][0] = rich_segment_info[i].second.directions_[occ_start_id][0];
           }
-          for (int j = occ_end_id + 1; j < RichInfoSegs[i].second.cp_size; j++)
+          for (int j = occ_end_id + 1; j < rich_segment_info[i].second.control_point_count_; j++)
           {
-            RichInfoSegs[i].second.base_point[j][0] = RichInfoSegs[i].second.base_point[occ_end_id][0];
-            RichInfoSegs[i].second.direction[j][0] = RichInfoSegs[i].second.direction[occ_end_id][0];
+            rich_segment_info[i].second.base_points_[j][0] = rich_segment_info[i].second.base_points_[occ_end_id][0];
+            rich_segment_info[i].second.directions_[j][0] = rich_segment_info[i].second.directions_[occ_end_id][0];
           }
         }
 
@@ -1057,110 +1057,110 @@ namespace diff_planner
       }
       else
       {
-        Eigen::Vector3d base_vec_reverse = -RichInfoSegs[i].first.direction[0][0];
-        Eigen::Vector3d base_pt_reverse = RichInfoSegs[i].first.points.col(0) + base_vec_reverse * (RichInfoSegs[i].first.base_point[0][0] - RichInfoSegs[i].first.points.col(0)).norm();
+        Eigen::Vector3d reverse_base_vector = -rich_segment_info[i].first.directions_[0][0];
+        Eigen::Vector3d reverse_base_point = rich_segment_info[i].first.points_.col(0) + reverse_base_vector * (rich_segment_info[i].first.base_points_[0][0] - rich_segment_info[i].first.points_.col(0)).norm();
 
-        if (grid_map_->GetInflatedOccupancy(base_pt_reverse)) // Search outward.
+        if (grid_map_->GetInflatedOccupancy(reverse_base_point)) // Search outward.
         {
-          double l_upbound = 5 * CTRL_PT_DIST; // "5" is the threshold.
-          double l = RESOLUTION;
-          for (; l <= l_upbound; l += RESOLUTION)
+          double search_limit = 5 * control_point_distance; // "5" is the threshold.
+          double l = resolution;
+          for (; l <= search_limit; l += resolution)
           {
-            Eigen::Vector3d base_pt_temp = base_pt_reverse + l * base_vec_reverse;
-            if (!grid_map_->GetInflatedOccupancy(base_pt_temp))
+            Eigen::Vector3d temporary_base_point = reverse_base_point + l * reverse_base_vector;
+            if (!grid_map_->GetInflatedOccupancy(temporary_base_point))
             {
-              RichInfoSegs[i].second.base_point[0][0] = base_pt_temp;
-              RichInfoSegs[i].second.direction[0][0] = base_vec_reverse;
+              rich_segment_info[i].second.base_points_[0][0] = temporary_base_point;
+              rich_segment_info[i].second.directions_[0][0] = reverse_base_vector;
               break;
             }
           }
-          if (l > l_upbound)
+          if (l > search_limit)
           {
             ROS_WARN_COND(VERBOSE_OUTPUT, "Can't find the new base points at the opposite within the threshold, 2. i=%d", i);
 
             segments.erase(segments.begin() + i);
-            RichInfoSegs.erase(RichInfoSegs.begin() + i);
-            seg_upbound--;
+            rich_segment_info.erase(rich_segment_info.begin() + i);
+            segment_count--;
             i--;
           }
         }
-        else if ((base_pt_reverse - RichInfoSegs[i].first.points.col(0)).norm() >= RESOLUTION) // Unnecessary to search.
+        else if ((reverse_base_point - rich_segment_info[i].first.points_.col(0)).norm() >= resolution) // Unnecessary to search.
         {
-          RichInfoSegs[i].second.base_point[0][0] = base_pt_reverse;
-          RichInfoSegs[i].second.direction[0][0] = base_vec_reverse;
+          rich_segment_info[i].second.base_points_[0][0] = reverse_base_point;
+          rich_segment_info[i].second.directions_[0][0] = reverse_base_vector;
         }
         else
         {
           ROS_WARN_COND(VERBOSE_OUTPUT, "base_point and control point are too close!, 2");
           if (VERBOSE_OUTPUT)
-            cout << "base_point=" << RichInfoSegs[i].first.base_point[0][0].transpose() << " control point=" << RichInfoSegs[i].first.points.col(0).transpose() << endl;
+            cout << "base_point=" << rich_segment_info[i].first.base_points_[0][0].transpose() << " control point=" << rich_segment_info[i].first.points_.col(0).transpose() << endl;
 
           segments.erase(segments.begin() + i);
-          RichInfoSegs.erase(RichInfoSegs.begin() + i);
-          seg_upbound--;
+          rich_segment_info.erase(rich_segment_info.begin() + i);
+          segment_count--;
           i--;
         }
       }
     }
 
-    // Step 2. Assemble each segment to make up the new control point sequence.
-    if (seg_upbound == 0) // After the erase operation above, segment legth will decrease to 0 again.
+    // Step 2. Assemble each Segment to make up the new control point sequence.
+    if (segment_count == 0) // After the erase operation above, Segment legth will decrease to 0 again.
     {
-      std::vector<ConstraintPoints> oneSeg;
-      oneSeg.push_back(cps_);
-      return oneSeg;
+      std::vector<ConstraintPoints> segment_info;
+      segment_info.push_back(constraint_points_);
+      return segment_info;
     }
 
-    std::vector<int> selection(seg_upbound);
+    std::vector<int> selection(segment_count);
     std::fill(selection.begin(), selection.end(), 0);
     selection[0] = -1; // init
-    int max_traj_nums = static_cast<int>(pow(VARIS, seg_upbound));
+    int max_traj_nums = static_cast<int>(pow(kVariationCount, segment_count));
     for (int i = 0; i < max_traj_nums; i++)
     {
       // 2.1 Calculate the selection table.
-      int digit_id = 0;
-      selection[digit_id]++;
-      while (digit_id < seg_upbound && selection[digit_id] >= VARIS)
+      int digit_index = 0;
+      selection[digit_index]++;
+      while (digit_index < segment_count && selection[digit_index] >= kVariationCount)
       {
-        selection[digit_id] = 0;
-        digit_id++;
-        if (digit_id >= seg_upbound)
+        selection[digit_index] = 0;
+        digit_index++;
+        if (digit_index >= segment_count)
         {
-          ROS_ERROR("Should not happen!!! digit_id=%d, seg_upbound=%d", digit_id, seg_upbound);
+          ROS_ERROR("Should not happen!!! digit_id=%d, seg_upbound=%d", digit_index, segment_count);
         }
-        selection[digit_id]++;
+        selection[digit_index]++;
       }
 
       // 2.2 Assign params according to the selection table.
-      ConstraintPoints cpsOneSample;
-      cpsOneSample.resize_cp(cps_.cp_size);
-      int cp_id = 0, seg_id = 0, cp_of_seg_id = 0;
-      while (/*seg_id < RichInfoSegs.size() ||*/ cp_id < cps_.cp_size)
+      ConstraintPoints sample_constraint_points;
+      sample_constraint_points.Resize(constraint_points_.control_point_count_);
+      int control_point_index = 0, segment_index = 0, segment_control_point_index = 0;
+      while (/*segment_index < rich_segment_info.size() ||*/ control_point_index < constraint_points_.control_point_count_)
       {
 
-        if (seg_id >= seg_upbound || cp_id < segments[seg_id].first || cp_id > segments[seg_id].second)
+        if (segment_index >= segment_count || control_point_index < segments[segment_index].first || control_point_index > segments[segment_index].second)
         {
-          cpsOneSample.points.col(cp_id) = cps_.points.col(cp_id);
-          cpsOneSample.base_point[cp_id] = cps_.base_point[cp_id];
-          cpsOneSample.direction[cp_id] = cps_.direction[cp_id];
+          sample_constraint_points.points_.col(control_point_index) = constraint_points_.points_.col(control_point_index);
+          sample_constraint_points.base_points_[control_point_index] = constraint_points_.base_points_[control_point_index];
+          sample_constraint_points.directions_[control_point_index] = constraint_points_.directions_[control_point_index];
         }
-        else if (cp_id >= segments[seg_id].first && cp_id <= segments[seg_id].second)
+        else if (control_point_index >= segments[segment_index].first && control_point_index <= segments[segment_index].second)
         {
-          if (!selection[seg_id]) // zx-todo
+          if (!selection[segment_index]) // zx-todo
           {
-            cpsOneSample.points.col(cp_id) = RichInfoSegs[seg_id].first.points.col(cp_of_seg_id);
-            cpsOneSample.base_point[cp_id] = RichInfoSegs[seg_id].first.base_point[cp_of_seg_id];
-            cpsOneSample.direction[cp_id] = RichInfoSegs[seg_id].first.direction[cp_of_seg_id];
-            cp_of_seg_id++;
+            sample_constraint_points.points_.col(control_point_index) = rich_segment_info[segment_index].first.points_.col(segment_control_point_index);
+            sample_constraint_points.base_points_[control_point_index] = rich_segment_info[segment_index].first.base_points_[segment_control_point_index];
+            sample_constraint_points.directions_[control_point_index] = rich_segment_info[segment_index].first.directions_[segment_control_point_index];
+            segment_control_point_index++;
           }
           else
           {
-            if (RichInfoSegs[seg_id].second.cp_size)
+            if (rich_segment_info[segment_index].second.control_point_count_)
             {
-              cpsOneSample.points.col(cp_id) = RichInfoSegs[seg_id].second.points.col(cp_of_seg_id);
-              cpsOneSample.base_point[cp_id] = RichInfoSegs[seg_id].second.base_point[cp_of_seg_id];
-              cpsOneSample.direction[cp_id] = RichInfoSegs[seg_id].second.direction[cp_of_seg_id];
-              cp_of_seg_id++;
+              sample_constraint_points.points_.col(control_point_index) = rich_segment_info[segment_index].second.points_.col(segment_control_point_index);
+              sample_constraint_points.base_points_[control_point_index] = rich_segment_info[segment_index].second.base_points_[segment_control_point_index];
+              sample_constraint_points.directions_[control_point_index] = rich_segment_info[segment_index].second.directions_[segment_control_point_index];
+              segment_control_point_index++;
             }
             else
             {
@@ -1169,159 +1169,159 @@ namespace diff_planner
             }
           }
 
-          if (cp_id == segments[seg_id].second)
+          if (control_point_index == segments[segment_index].second)
           {
-            cp_of_seg_id = 0;
-            seg_id++;
+            segment_control_point_index = 0;
+            segment_index++;
           }
         }
         else
         {
           ROS_ERROR("Shold not happen!!!!, cp_id=%d, seg_id=%d, segments.front().first=%d, segments.back().second=%d, segments[seg_id].first=%d, segments[seg_id].second=%d",
-                    cp_id, seg_id, segments.front().first, segments.back().second, segments[seg_id].first, segments[seg_id].second);
+                    control_point_index, segment_index, segments.front().first, segments.back().second, segments[segment_index].first, segments[segment_index].second);
         }
 
-        cp_id++;
+        control_point_index++;
       }
 
-      control_pts_buf.push_back(cpsOneSample);
+      control_point_candidates.push_back(sample_constraint_points);
 
     abandon_this_trajectory:;
     }
 
-    return control_pts_buf;
+    return control_point_candidates;
   }
 
   /* callbacks by the L-BFGS optimizer */
-  double PolyTrajOptimizer::costFunctionCallback(void *func_data, const double *x, double *grad, const int n)
+  double PolyTrajOptimizer::CostFunctionCallback(void *func_data, const double *x, double *grad, const int n)
   {
     PolyTrajOptimizer *opt = reinterpret_cast<PolyTrajOptimizer *>(func_data);
 
-    fill(opt->min_ellip_dist2_.begin(), opt->min_ellip_dist2_.end(), std::numeric_limits<double>::max());
+    fill(opt->minimum_ellipsoid_distances_squared_.begin(), opt->minimum_ellipsoid_distances_squared_.end(), std::numeric_limits<double>::max());
 
-    Eigen::Map<const Eigen::MatrixXd> P(x, 3, opt->piece_num_ - 1);
-    // Eigen::VectorXd T(Eigen::VectorXd::Constant(piece_nums, opt->t2T(x[n - 1]))); // same t
-    Eigen::Map<const Eigen::VectorXd> t(x + (3 * (opt->piece_num_ - 1)), opt->piece_num_);
-    Eigen::Map<Eigen::MatrixXd> gradP(grad, 3, opt->piece_num_ - 1);
-    Eigen::Map<Eigen::VectorXd> gradt(grad + (3 * (opt->piece_num_ - 1)), opt->piece_num_);
-    Eigen::VectorXd T(opt->piece_num_);
+    Eigen::Map<const Eigen::MatrixXd> inner_points(x, 3, opt->piece_count_ - 1);
+    // Eigen::VectorXd real_time(Eigen::VectorXd::Constant(piece_nums, opt->t2T(x[n - 1]))); // same t
+    Eigen::Map<const Eigen::VectorXd> t(x + (3 * (opt->piece_count_ - 1)), opt->piece_count_);
+    Eigen::Map<Eigen::MatrixXd> point_gradient(grad, 3, opt->piece_count_ - 1);
+    Eigen::Map<Eigen::VectorXd> gradt(grad + (3 * (opt->piece_count_ - 1)), opt->piece_count_);
+    Eigen::VectorXd real_time(opt->piece_count_);
 
-    Eigen::VectorXd gradT(opt->piece_num_);
-    double smoo_cost = 0, time_cost = 0;
-    Eigen::VectorXd obs_swarm_feas_qvar_costs(4);
+    Eigen::VectorXd real_time_gradient(opt->piece_count_);
+    double smoothness_cost = 0, time_cost = 0;
+    Eigen::VectorXd dynamic_costs(4);
 
-    opt->VirtualT2RealT(t, T); // Unbounded virtual time to real time
+    opt->VirtualTimeToRealTime(t, real_time); // Unbounded virtual time to real time
 
-    opt->jerkOpt_.Generate(P, T); // Generate trajectory from {P,T}
+    opt->jerk_optimizer_.Generate(inner_points, real_time); // Generate trajectory from {inner_points,real_time}
 
-    opt->initAndGetSmoothnessGradCost2PT(gradT, smoo_cost); // Smoothness cost
+    opt->InitializeSmoothnessGradientCost(real_time_gradient, smoothness_cost); // Smoothness cost
 
-    opt->addPVAJGradCost2CT(gradT, obs_swarm_feas_qvar_costs, opt->cps_num_prePiece_); // Time int cost
+    opt->AddDynamicGradientCost(real_time_gradient, dynamic_costs, opt->constraint_points_per_piece_); // Time int cost
 
-    if (opt->allowRebound())
+    if (opt->AllowRebound())
     {
-      opt->roughlyCheckConstraintPoints(); // Trajectory rebound
+      opt->RoughlyCheckConstraintPoints(); // Trajectory rebound
     }
 
-    opt->jerkOpt_.GetGradientsToTimeAndPoints(gradT, gradP); // Gradient prepagation
+    opt->jerk_optimizer_.GetGradientsToTimeAndPoints(real_time_gradient, point_gradient); // Gradient prepagation
 
-    opt->VirtualTGradCost(T, t, gradT, gradt, time_cost); // Real time back to virtual time
+    opt->CalculateVirtualTimeGradientCost(real_time, t, real_time_gradient, gradt, time_cost); // Real time back to virtual time
 
-    opt->iter_num_ += 1;
-    return smoo_cost + obs_swarm_feas_qvar_costs.sum() + time_cost;
+    opt->iteration_count_ += 1;
+    return smoothness_cost + dynamic_costs.sum() + time_cost;
   }
 
-  int PolyTrajOptimizer::earlyExitCallback(void *func_data, const double *x, const double *g, const double fx, const double xnorm, const double gnorm, const double step, int n, int k, int ls)
+  int PolyTrajOptimizer::EarlyExitCallback(void *func_data, const double *x, const double *g, const double fx, const double xnorm, const double gnorm, const double step, int n, int k, int ls)
   {
     PolyTrajOptimizer *opt = reinterpret_cast<PolyTrajOptimizer *>(func_data);
 
-    return (opt->force_stop_type_ == STOP_FOR_ERROR || opt->force_stop_type_ == STOP_FOR_REBOUND);
+    return (opt->force_stop_type_ == kStopForError || opt->force_stop_type_ == kStopForRebound);
   }
 
   /* mappings between real world time and unconstrained virtual time */
-  template <typename EIGENVEC>
-  void PolyTrajOptimizer::RealT2VirtualT(const Eigen::VectorXd &RT, EIGENVEC &VT)
+  template <typename EigenVectorType>
+  void PolyTrajOptimizer::RealTimeToVirtualTime(const Eigen::VectorXd &real_time, EigenVectorType &virtual_time)
   {
-    for (int i = 0; i < RT.size(); ++i)
+    for (int i = 0; i < real_time.size(); ++i)
     {
-      VT(i) = RT(i) > 1.0 ? (sqrt(2.0 * RT(i) - 1.0) - 1.0)
-                          : (1.0 - sqrt(2.0 / RT(i) - 1.0));
+      virtual_time(i) = real_time(i) > 1.0 ? (sqrt(2.0 * real_time(i) - 1.0) - 1.0)
+                          : (1.0 - sqrt(2.0 / real_time(i) - 1.0));
     }
   }
 
-  template <typename EIGENVEC>
-  void PolyTrajOptimizer::VirtualT2RealT(const EIGENVEC &VT, Eigen::VectorXd &RT)
+  template <typename EigenVectorType>
+  void PolyTrajOptimizer::VirtualTimeToRealTime(const EigenVectorType &virtual_time, Eigen::VectorXd &real_time)
   {
-    for (int i = 0; i < VT.size(); ++i)
+    for (int i = 0; i < virtual_time.size(); ++i)
     {
-      RT(i) = VT(i) > 0.0 ? ((0.5 * VT(i) + 1.0) * VT(i) + 1.0)
-                          : 1.0 / ((0.5 * VT(i) - 1.0) * VT(i) + 1.0);
+      real_time(i) = virtual_time(i) > 0.0 ? ((0.5 * virtual_time(i) + 1.0) * virtual_time(i) + 1.0)
+                          : 1.0 / ((0.5 * virtual_time(i) - 1.0) * virtual_time(i) + 1.0);
     }
   }
 
-  template <typename EIGENVEC, typename EIGENVECGD>
-  void PolyTrajOptimizer::VirtualTGradCost(
-      const Eigen::VectorXd &RT, const EIGENVEC &VT,
-      const Eigen::VectorXd &gdRT, EIGENVECGD &gdVT,
-      double &costT)
+  template <typename EigenVectorType, typename GradientVectorType>
+  void PolyTrajOptimizer::CalculateVirtualTimeGradientCost(
+      const Eigen::VectorXd &real_time, const EigenVectorType &virtual_time,
+      const Eigen::VectorXd &real_time_gradient, GradientVectorType &virtual_time_gradient,
+      double &time_cost)
   {
-    for (int i = 0; i < VT.size(); ++i)
+    for (int i = 0; i < virtual_time.size(); ++i)
     {
-      double gdVT2Rt;
-      if (VT(i) > 0)
+      double virtual_to_real_time_derivative;
+      if (virtual_time(i) > 0)
       {
-        gdVT2Rt = VT(i) + 1.0;
+        virtual_to_real_time_derivative = virtual_time(i) + 1.0;
       }
       else
       {
-        double denSqrt = (0.5 * VT(i) - 1.0) * VT(i) + 1.0;
-        gdVT2Rt = (1.0 - VT(i)) / (denSqrt * denSqrt);
+        double denominator = (0.5 * virtual_time(i) - 1.0) * virtual_time(i) + 1.0;
+        virtual_to_real_time_derivative = (1.0 - virtual_time(i)) / (denominator * denominator);
       }
 
-      gdVT(i) = (gdRT(i) + wei_time_) * gdVT2Rt;
+      virtual_time_gradient(i) = (real_time_gradient(i) + time_weight_) * virtual_to_real_time_derivative;
     }
 
-    costT = RT.sum() * wei_time_;
+    time_cost = real_time.sum() * time_weight_;
   }
 
   /* gradient and cost evaluation functions */
-  template <typename EIGENVEC>
-  void PolyTrajOptimizer::initAndGetSmoothnessGradCost2PT(EIGENVEC &gdT, double &cost)
+  template <typename EigenVectorType>
+  void PolyTrajOptimizer::InitializeSmoothnessGradientCost(EigenVectorType &duration_gradient, double &cost)
   {
-    jerkOpt_.InitializeGradientCost(gdT, cost);
+    jerk_optimizer_.InitializeGradientCost(duration_gradient, cost);
   }
 
-  template <typename EIGENVEC>
-  void PolyTrajOptimizer::addPVAJGradCost2CT(EIGENVEC &gdT, Eigen::VectorXd &costs, const int &K)
+  template <typename EigenVectorType>
+  void PolyTrajOptimizer::AddDynamicGradientCost(EigenVectorType &duration_gradient, Eigen::VectorXd &costs, const int &samples_per_piece)
   {
     //
-    int N = gdT.size();
+    int element_count = duration_gradient.size();
     Eigen::Vector3d pos, vel, acc, jer, sna;
     Eigen::Vector3d gradp, gradv, grada, gradj;
     double costp, costv, costa, costj;
     Eigen::Matrix<double, 6, 1> beta0, beta1, beta2, beta3, beta4;
     double s1, s2, s3, s4, s5;
     double step, alpha;
-    Eigen::Matrix<double, 6, 3> gradViolaPc, gradViolaVc, gradViolaAc, gradViolaJc;
-    double gradViolaPt, gradViolaVt, gradViolaAt, gradViolaJt;
+    Eigen::Matrix<double, 6, 3> position_coefficient_gradient, velocity_coefficient_gradient, acceleration_coefficient_gradient, jerk_coefficient_gradient;
+    double position_time_gradient, velocity_time_gradient, acceleration_time_gradient, jerk_time_gradient;
     double omg;
     int i_dp = 0;
     costs.setZero();
-    // Eigen::MatrixXd constraint_pts(3, N * K + 1);
+    // Eigen::MatrixXd constraint_pts(3, element_count * samples_per_piece + 1);
 
     // printf("A\n");
 
-    // int innerLoop;
+    // int integration_point_count;
     double t = 0;
-    for (int i = 0; i < N; ++i)
+    for (int i = 0; i < element_count; ++i)
     {
 
-      const Eigen::Matrix<double, 6, 3> &c = jerkOpt_.GetCoefficients().block<6, 3>(i * 6, 0);
-      step = jerkOpt_.GetDurations()(i) / K;
+      const Eigen::Matrix<double, 6, 3> &c = jerk_optimizer_.GetCoefficients().block<6, 3>(i * 6, 0);
+      step = jerk_optimizer_.GetDurations()(i) / samples_per_piece;
       s1 = 0.0;
-      // innerLoop = K;
+      // integration_point_count = samples_per_piece;
 
-      for (int j = 0; j <= K; ++j)
+      for (int j = 0; j <= samples_per_piece; ++j)
       {
         s2 = s1 * s1;
         s3 = s2 * s1;
@@ -1332,95 +1332,95 @@ namespace diff_planner
         beta2 << 0.0, 0.0, 2.0, 6.0 * s1, 12.0 * s2, 20.0 * s3;
         beta3 << 0.0, 0.0, 0.0, 6.0, 24.0 * s1, 60.0 * s2;
         beta4 << 0.0, 0.0, 0.0, 0.0, 24.0, 120.0 * s1;
-        alpha = 1.0 / K * j;
+        alpha = 1.0 / samples_per_piece * j;
         pos = c.transpose() * beta0;
         vel = c.transpose() * beta1;
         acc = c.transpose() * beta2;
         jer = c.transpose() * beta3;
         sna = c.transpose() * beta4;
 
-        omg = (j == 0 || j == K) ? 0.5 : 1.0;
+        omg = (j == 0 || j == samples_per_piece) ? 0.5 : 1.0;
 
-        cps_.points.col(i_dp) = pos;
+        constraint_points_.points_.col(i_dp) = pos;
 
         // collision
-        if (obstacleGradCostP(i_dp, pos, gradp, costp))
+        if (CalculateObstacleGradientCost(i_dp, pos, gradp, costp))
         {
-          gradViolaPc = beta0 * gradp.transpose();
-          gradViolaPt = alpha * gradp.transpose() * vel;
-          jerkOpt_.GetCoefficientGradients().block<6, 3>(i * 6, 0) += omg * step * gradViolaPc;
-          gdT(i) += omg * (costp / K + step * gradViolaPt);
+          position_coefficient_gradient = beta0 * gradp.transpose();
+          position_time_gradient = alpha * gradp.transpose() * vel;
+          jerk_optimizer_.GetCoefficientGradients().block<6, 3>(i * 6, 0) += omg * step * position_coefficient_gradient;
+          duration_gradient(i) += omg * (costp / samples_per_piece + step * position_time_gradient);
           costs(0) += omg * step * costp;
         }
 
         // swarm
         double gradt, grad_prev_t;
-        if (swarmGradCostP(i_dp, t + step * j, pos, vel, gradp, gradt, grad_prev_t, costp))
+        if (CalculateSwarmGradientCost(i_dp, t + step * j, pos, vel, gradp, gradt, grad_prev_t, costp))
         {
-          gradViolaPc = beta0 * gradp.transpose();
-          gradViolaPt = alpha * gradt;
-          jerkOpt_.GetCoefficientGradients().block<6, 3>(i * 6, 0) += omg * step * gradViolaPc;
-          gdT(i) += omg * (costp / K + step * gradViolaPt);
+          position_coefficient_gradient = beta0 * gradp.transpose();
+          position_time_gradient = alpha * gradt;
+          jerk_optimizer_.GetCoefficientGradients().block<6, 3>(i * 6, 0) += omg * step * position_coefficient_gradient;
+          duration_gradient(i) += omg * (costp / samples_per_piece + step * position_time_gradient);
           if (i > 0)
           {
-            gdT.head(i).array() += omg * step * grad_prev_t;
+            duration_gradient.head(i).array() += omg * step * grad_prev_t;
           }
           costs(1) += omg * step * costp;
         }
 
         // feasibility
-        if (feasibilityGradCostV(vel, gradv, costv))
+        if (CalculateVelocityFeasibilityGradientCost(vel, gradv, costv))
         {
-          gradViolaVc = beta1 * gradv.transpose();
-          gradViolaVt = alpha * gradv.transpose() * acc;
-          jerkOpt_.GetCoefficientGradients().block<6, 3>(i * 6, 0) += omg * step * gradViolaVc;
-          gdT(i) += omg * (costv / K + step * gradViolaVt);
+          velocity_coefficient_gradient = beta1 * gradv.transpose();
+          velocity_time_gradient = alpha * gradv.transpose() * acc;
+          jerk_optimizer_.GetCoefficientGradients().block<6, 3>(i * 6, 0) += omg * step * velocity_coefficient_gradient;
+          duration_gradient(i) += omg * (costv / samples_per_piece + step * velocity_time_gradient);
           costs(2) += omg * step * costv;
         }
 
-        if (feasibilityGradCostA(acc, grada, costa))
+        if (CalculateAccelerationFeasibilityGradientCost(acc, grada, costa))
         {
-          gradViolaAc = beta2 * grada.transpose();
-          gradViolaAt = alpha * grada.transpose() * jer;
-          jerkOpt_.GetCoefficientGradients().block<6, 3>(i * 6, 0) += omg * step * gradViolaAc;
-          gdT(i) += omg * (costa / K + step * gradViolaAt);
+          acceleration_coefficient_gradient = beta2 * grada.transpose();
+          acceleration_time_gradient = alpha * grada.transpose() * jer;
+          jerk_optimizer_.GetCoefficientGradients().block<6, 3>(i * 6, 0) += omg * step * acceleration_coefficient_gradient;
+          duration_gradient(i) += omg * (costa / samples_per_piece + step * acceleration_time_gradient);
           costs(2) += omg * step * costa;
         }
 
-        if (feasibilityGradCostJ(jer, gradj, costj))
+        if (CalculateJerkFeasibilityGradientCost(jer, gradj, costj))
         {
-          gradViolaJc = beta3 * gradj.transpose();
-          gradViolaJt = alpha * gradj.transpose() * sna;
-          jerkOpt_.GetCoefficientGradients().block<6, 3>(i * 6, 0) += omg * step * gradViolaJc;
-          gdT(i) += omg * (costj / K + step * gradViolaJt);
+          jerk_coefficient_gradient = beta3 * gradj.transpose();
+          jerk_time_gradient = alpha * gradj.transpose() * sna;
+          jerk_optimizer_.GetCoefficientGradients().block<6, 3>(i * 6, 0) += omg * step * jerk_coefficient_gradient;
+          duration_gradient(i) += omg * (costj / samples_per_piece + step * jerk_time_gradient);
           costs(2) += omg * step * costj;
         }
 
         // printf("L\n");
 
         s1 += step;
-        if (j != K || (j == K && i == N - 1))
+        if (j != samples_per_piece || (j == samples_per_piece && i == element_count - 1))
         {
           ++i_dp;
         }
       }
 
-      t += jerkOpt_.GetDurations()(i);
+      t += jerk_optimizer_.GetDurations()(i);
     }
 
     // quratic variance
     Eigen::MatrixXd gdp;
     double var;
-    // lengthVarianceWithGradCost2p(cps_.points, K, gdp, var);
-    distanceSqrVarianceWithGradCost2p(cps_.points, gdp, var);
+    // CalculateLengthVarianceGradientCost(constraint_points_.points_, samples_per_piece, gdp, var);
+    CalculateSquaredDistanceVarianceGradientCost(constraint_points_.points_, gdp, var);
 
     i_dp = 0;
-    for (int i = 0; i < N; ++i)
+    for (int i = 0; i < element_count; ++i)
     {
-      step = jerkOpt_.GetDurations()(i) / K;
+      step = jerk_optimizer_.GetDurations()(i) / samples_per_piece;
       s1 = 0.0;
 
-      for (int j = 0; j <= K; ++j)
+      for (int j = 0; j <= samples_per_piece; ++j)
       {
         s2 = s1 * s1;
         s3 = s2 * s1;
@@ -1428,18 +1428,18 @@ namespace diff_planner
         s5 = s4 * s1;
         beta0 << 1.0, s1, s2, s3, s4, s5;
         beta1 << 0.0, 1.0, 2.0 * s1, 3.0 * s2, 4.0 * s3, 5.0 * s4;
-        alpha = 1.0 / K * j;
-        vel = jerkOpt_.GetCoefficients().block<6, 3>(i * 6, 0).transpose() * beta1;
+        alpha = 1.0 / samples_per_piece * j;
+        vel = jerk_optimizer_.GetCoefficients().block<6, 3>(i * 6, 0).transpose() * beta1;
 
-        omg = (j == 0 || j == K) ? 0.5 : 1.0;
+        omg = (j == 0 || j == samples_per_piece) ? 0.5 : 1.0;
 
-        gradViolaPc = beta0 * gdp.col(i_dp).transpose();
-        gradViolaPt = alpha * gdp.col(i_dp).transpose() * vel;
-        jerkOpt_.GetCoefficientGradients().block<6, 3>(i * 6, 0) += omg * gradViolaPc;
-        gdT(i) += omg * (gradViolaPt);
+        position_coefficient_gradient = beta0 * gdp.col(i_dp).transpose();
+        position_time_gradient = alpha * gdp.col(i_dp).transpose() * vel;
+        jerk_optimizer_.GetCoefficientGradients().block<6, 3>(i * 6, 0) += omg * position_coefficient_gradient;
+        duration_gradient(i) += omg * (position_time_gradient);
 
         s1 += step;
-        if (j != K || (j == K && i == N - 1))
+        if (j != samples_per_piece || (j == samples_per_piece && i == element_count - 1))
         {
           ++i_dp;
         }
@@ -1449,12 +1449,12 @@ namespace diff_planner
     costs(3) += var;
   }
 
-  bool PolyTrajOptimizer::obstacleGradCostP(const int i_dp,
+  bool PolyTrajOptimizer::CalculateObstacleGradientCost(const int i_dp,
                                             const Eigen::Vector3d &p,
                                             Eigen::Vector3d &gradp,
                                             double &costp)
   {
-    if (i_dp == 0 || i_dp > ConstraintPoints::two_thirds_id(cps_.points, touch_goal_)) // only apply to first 2/3
+    if (i_dp == 0 || i_dp > ConstraintPoints::TwoThirdsIndex(constraint_points_.points_, touch_goal_)) // only apply to first 2/3
       return false;
 
     bool ret = false;
@@ -1463,19 +1463,19 @@ namespace diff_planner
     costp = 0;
 
     // Obatacle cost
-    for (size_t j = 0; j < cps_.direction[i_dp].size(); ++j)
+    for (size_t j = 0; j < constraint_points_.directions_[i_dp].size(); ++j)
     {
-      Eigen::Vector3d ray = (p - cps_.base_point[i_dp][j]);
-      double dist = ray.dot(cps_.direction[i_dp][j]);
-      double dist_err = obs_clearance_ - dist;
-      double dist_err_soft = obs_clearance_soft_ - dist;
-      Eigen::Vector3d dist_grad = cps_.direction[i_dp][j];
+      Eigen::Vector3d ray = (p - constraint_points_.base_points_[i_dp][j]);
+      double dist = ray.dot(constraint_points_.directions_[i_dp][j]);
+      double dist_err = obstacle_clearance_ - dist;
+      double dist_err_soft = soft_obstacle_clearance_ - dist;
+      Eigen::Vector3d dist_grad = constraint_points_.directions_[i_dp][j];
 
       if (dist_err > 0)
       {
         ret = true;
-        costp += wei_obs_ * pow(dist_err, 3);
-        gradp += -wei_obs_ * 3.0 * dist_err * dist_err * dist_grad;
+        costp += obstacle_weight_ * pow(dist_err, 3);
+        gradp += -obstacle_weight_ * 3.0 * dist_err * dist_err * dist_grad;
       }
 
       if (dist_err_soft > 0)
@@ -1484,15 +1484,15 @@ namespace diff_planner
         double r = 0.05;
         double rsqr = r * r;
         double term = sqrt(1.0 + dist_err_soft * dist_err_soft / rsqr);
-        costp += wei_obs_soft_ * rsqr * (term - 1.0);
-        gradp += -wei_obs_soft_ * dist_err_soft / term * dist_grad;
+        costp += soft_obstacle_weight_ * rsqr * (term - 1.0);
+        gradp += -soft_obstacle_weight_ * dist_err_soft / term * dist_grad;
       }
     }
 
     return ret;
   }
 
-  bool PolyTrajOptimizer::swarmGradCostP(const int i_dp,
+  bool PolyTrajOptimizer::CalculateSwarmGradientCost(const int i_dp,
                                          const double t,
                                          const Eigen::Vector3d &p,
                                          const Eigen::Vector3d &v,
@@ -1501,7 +1501,7 @@ namespace diff_planner
                                          double &grad_prev_t,
                                          double &costp)
   {
-    if (i_dp <= 0 || i_dp > ConstraintPoints::two_thirds_id(cps_.points, touch_goal_)) // only apply to first 2/3
+    if (i_dp <= 0 || i_dp > ConstraintPoints::TwoThirdsIndex(constraint_points_.points_, touch_goal_)) // only apply to first 2/3
       return false;
 
     bool ret = false;
@@ -1511,36 +1511,43 @@ namespace diff_planner
     grad_prev_t = 0;
     costp = 0;
 
-    constexpr double a = 2.0, b = 1.0, inv_a2 = 1 / a / a, inv_b2 = 1 / b / b;
+    constexpr double kVerticalScale = 2.0;
+    constexpr double kHorizontalScale = 1.0;
+    constexpr double kInverseVerticalScaleSquared =
+        1.0 / kVerticalScale / kVerticalScale;
+    constexpr double kInverseHorizontalScaleSquared =
+        1.0 / kHorizontalScale / kHorizontalScale;
 
-    for (size_t id = 0; id < swarm_trajs_->size(); id++)
+    for (size_t id = 0; id < swarm_trajectories_->size(); id++)
     {
-      if ((swarm_trajs_->at(id).drone_id < 0) || swarm_trajs_->at(id).drone_id == drone_id_)
+      if ((swarm_trajectories_->at(id).drone_id < 0) || swarm_trajectories_->at(id).drone_id == drone_id_)
       {
         continue;
       }
 
-      double traj_i_satrt_time = swarm_trajs_->at(id).start_time;
-      double pt_time = (t_now_ - traj_i_satrt_time) + t; // never assign a high-precision golbal time to a double directly!
-      const double CLEARANCE = (swarm_clearance_ + swarm_trajs_->at(id).desired_clearance) * 1.5; // 1.5 is to compensate slight constraint violation
-      const double CLEARANCE2 = CLEARANCE * CLEARANCE;
+      double traj_i_satrt_time = swarm_trajectories_->at(id).start_time;
+      double pt_time = (current_time_ - traj_i_satrt_time) + t; // never assign a high-precision golbal time to a double directly!
+      const double clearance = (swarm_clearance_ + swarm_trajectories_->at(id).desired_clearance) * 1.5; // 1.5 is to compensate slight constraint violation
+      const double clearance_squared = clearance * clearance;
 
       Eigen::Vector3d swarm_p, swarm_v;
-      if (pt_time < swarm_trajs_->at(id).duration)
+      if (pt_time < swarm_trajectories_->at(id).duration)
       {
-        swarm_p = swarm_trajs_->at(id).trajectory.GetPosition(pt_time);
-        swarm_v = swarm_trajs_->at(id).trajectory.GetVelocity(pt_time);
+        swarm_p = swarm_trajectories_->at(id).trajectory.GetPosition(pt_time);
+        swarm_v = swarm_trajectories_->at(id).trajectory.GetVelocity(pt_time);
       }
       else
       {
-        double exceed_time = pt_time - swarm_trajs_->at(id).duration;
-        swarm_v = swarm_trajs_->at(id).trajectory.GetVelocity(swarm_trajs_->at(id).duration);
-        swarm_p = swarm_trajs_->at(id).trajectory.GetPosition(swarm_trajs_->at(id).duration) +
+        double exceed_time = pt_time - swarm_trajectories_->at(id).duration;
+        swarm_v = swarm_trajectories_->at(id).trajectory.GetVelocity(swarm_trajectories_->at(id).duration);
+        swarm_p = swarm_trajectories_->at(id).trajectory.GetPosition(swarm_trajectories_->at(id).duration) +
                   exceed_time * swarm_v;
       }
       Eigen::Vector3d dist_vec = p - swarm_p;
-      double ellip_dist2 = dist_vec(2) * dist_vec(2) * inv_a2 + (dist_vec(0) * dist_vec(0) + dist_vec(1) * dist_vec(1)) * inv_b2;
-      double dist2_err = CLEARANCE2 - ellip_dist2;
+      double ellip_dist2 = dist_vec(2) * dist_vec(2) * kInverseVerticalScaleSquared +
+                           (dist_vec(0) * dist_vec(0) + dist_vec(1) * dist_vec(1)) *
+                               kInverseHorizontalScaleSquared;
+      double dist2_err = clearance_squared - ellip_dist2;
       double dist2_err2 = dist2_err * dist2_err;
       double dist2_err3 = dist2_err2 * dist2_err;
 
@@ -1548,116 +1555,120 @@ namespace diff_planner
       {
         ret = true;
 
-        costp += wei_swarm_mod_ * dist2_err3;
+        costp += modified_swarm_weight_ * dist2_err3;
 
-        Eigen::Vector3d dJ_dP = wei_swarm_mod_ * 3 * dist2_err2 * (-2) * Eigen::Vector3d(inv_b2 * dist_vec(0), inv_b2 * dist_vec(1), inv_a2 * dist_vec(2));
-        gradp += dJ_dP;
-        gradt += dJ_dP.dot(v - swarm_v);
-        grad_prev_t += dJ_dP.dot(-swarm_v);
+        Eigen::Vector3d position_cost_gradient =
+            modified_swarm_weight_ * 3 * dist2_err2 * (-2) *
+            Eigen::Vector3d(kInverseHorizontalScaleSquared * dist_vec(0),
+                            kInverseHorizontalScaleSquared * dist_vec(1),
+                            kInverseVerticalScaleSquared * dist_vec(2));
+        gradp += position_cost_gradient;
+        gradt += position_cost_gradient.dot(v - swarm_v);
+        grad_prev_t += position_cost_gradient.dot(-swarm_v);
       }
 
-      if (min_ellip_dist2_[id] > ellip_dist2)
+      if (minimum_ellipsoid_distances_squared_[id] > ellip_dist2)
       {
-        min_ellip_dist2_[id] = ellip_dist2;
+        minimum_ellipsoid_distances_squared_[id] = ellip_dist2;
       }
     }
 
     return ret;
   }
 
-  bool PolyTrajOptimizer::feasibilityGradCostV(const Eigen::Vector3d &v,
+  bool PolyTrajOptimizer::CalculateVelocityFeasibilityGradientCost(const Eigen::Vector3d &v,
                                                Eigen::Vector3d &gradv,
                                                double &costv)
   {
-    double vpen = v.squaredNorm() - max_vel_ * max_vel_;
+    double vpen = v.squaredNorm() - max_velocity_ * max_velocity_;
     if (vpen > 0)
     {
-      gradv = wei_feas_ * 6 * vpen * vpen * v;
-      costv = wei_feas_ * vpen * vpen * vpen;
+      gradv = feasibility_weight_ * 6 * vpen * vpen * v;
+      costv = feasibility_weight_ * vpen * vpen * vpen;
       return true;
     }
     return false;
   }
 
-  bool PolyTrajOptimizer::feasibilityGradCostA(const Eigen::Vector3d &a,
+  bool PolyTrajOptimizer::CalculateAccelerationFeasibilityGradientCost(const Eigen::Vector3d &a,
                                                Eigen::Vector3d &grada,
                                                double &costa)
   {
-    double apen = a.squaredNorm() - max_acc_ * max_acc_;
+    double apen = a.squaredNorm() - max_acceleration_ * max_acceleration_;
     if (apen > 0)
     {
-      grada = wei_feas_ * 6 * apen * apen * a;
-      costa = wei_feas_ * apen * apen * apen;
+      grada = feasibility_weight_ * 6 * apen * apen * a;
+      costa = feasibility_weight_ * apen * apen * apen;
       return true;
     }
     return false;
   }
 
-  bool PolyTrajOptimizer::feasibilityGradCostJ(const Eigen::Vector3d &j,
+  bool PolyTrajOptimizer::CalculateJerkFeasibilityGradientCost(const Eigen::Vector3d &j,
                                                Eigen::Vector3d &gradj,
                                                double &costj)
   {
-    double jpen = j.squaredNorm() - max_jer_ * max_jer_;
+    double jpen = j.squaredNorm() - max_jerk_ * max_jerk_;
     if (jpen > 0)
     {
-      gradj = wei_feas_ * 6 * jpen * jpen * j;
-      costj = wei_feas_ * jpen * jpen * jpen;
+      gradj = feasibility_weight_ * 6 * jpen * jpen * j;
+      costj = feasibility_weight_ * jpen * jpen * jpen;
       return true;
     }
     return false;
   }
 
-  void PolyTrajOptimizer::distanceSqrVarianceWithGradCost2p(const Eigen::MatrixXd &ps,
+  void PolyTrajOptimizer::CalculateSquaredDistanceVarianceGradientCost(const Eigen::MatrixXd &ps,
                                                             Eigen::MatrixXd &gdp,
                                                             double &var)
   {
-    int N = ps.cols() - 1;
-    Eigen::MatrixXd dps = ps.rightCols(N) - ps.leftCols(N);
+    int element_count = ps.cols() - 1;
+    Eigen::MatrixXd dps = ps.rightCols(element_count) - ps.leftCols(element_count);
     Eigen::VectorXd dsqrs = dps.colwise().squaredNorm().transpose();
     // double dsqrsum = dsqrs.sum();
     double dquarsum = dsqrs.squaredNorm();
-    // double dsqrmean = dsqrsum / N;
-    double dquarmean = dquarsum / N;
-    var = wei_sqrvar_ * (dquarmean);
-    gdp.resize(3, N + 1);
+    // double dsqrmean = dsqrsum / element_count;
+    double dquarmean = dquarsum / element_count;
+    var = squared_variance_weight_ * (dquarmean);
+    gdp.resize(3, element_count + 1);
     gdp.setZero();
-    for (int i = 0; i <= N; i++)
+    for (int i = 0; i <= element_count; i++)
     {
       if (i != 0)
       {
-        gdp.col(i) += wei_sqrvar_ * (4.0 * (dsqrs(i - 1)) / N * dps.col(i - 1));
+        gdp.col(i) += squared_variance_weight_ * (4.0 * (dsqrs(i - 1)) / element_count * dps.col(i - 1));
       }
-      if (i != N)
+      if (i != element_count)
       {
-        gdp.col(i) += wei_sqrvar_ * (-4.0 * (dsqrs(i)) / N * dps.col(i));
+        gdp.col(i) += squared_variance_weight_ * (-4.0 * (dsqrs(i)) / element_count * dps.col(i));
       }
     }
     return;
   }
 
-  void PolyTrajOptimizer::lengthVarianceWithGradCost2p(const Eigen::MatrixXd &ps,
+  void PolyTrajOptimizer::CalculateLengthVarianceGradientCost(const Eigen::MatrixXd &ps,
                                                        const int n,
                                                        Eigen::MatrixXd &gdp,
                                                        double &var)
   {
-    int N = ps.cols() - 1;
-    int M = N / n;
-    Eigen::MatrixXd dps = ps.rightCols(N) - ps.leftCols(N);
+    int element_count = ps.cols() - 1;
+    int group_count = element_count / n;
+    Eigen::MatrixXd dps = ps.rightCols(element_count) - ps.leftCols(element_count);
     Eigen::VectorXd ds = dps.colwise().norm().transpose();
-    Eigen::VectorXd ls(M), lsqrs(M);
-    for (int i = 0; i < M; i++)
+    Eigen::VectorXd ls(group_count), lsqrs(group_count);
+    for (int i = 0; i < group_count; i++)
     {
       ls(i) = ds.segment(i * n, n).sum();
       lsqrs(i) = ls(i) * ls(i);
     }
     double lm = ls.mean();
     double lsqrm = lsqrs.mean();
-    var = wei_sqrvar_ * (lsqrm - lm * lm) + 250.0 * M * lm;
-    Eigen::VectorXd gdls = wei_sqrvar_ * 2.0 / M * (ls.array() - lm) + 250.0;
+    var = squared_variance_weight_ * (lsqrm - lm * lm) + 250.0 * group_count * lm;
+    Eigen::VectorXd gdls = squared_variance_weight_ * 2.0 / group_count * (ls.array() - lm) + 250.0;
     Eigen::MatrixXd gdds = dps.colwise().normalized();
-    gdp.resize(3, N + 1);
+    gdp.resize(3, element_count + 1);
     gdp.setZero();
-    for (int i = 0; i < M; i++)
+    for (int i = 0; i < group_count; i++)
     {
       gdp.block(0, i * n, 3, n) -= gdls(i) * gdds.block(0, i * n, 3, n);
       gdp.block(0, i * n + 1, 3, n) += gdls(i) * gdds.block(0, i * n, 3, n);
@@ -1666,26 +1677,26 @@ namespace diff_planner
   }
 
   /* helper functions */
-  void PolyTrajOptimizer::setParam(ros::NodeHandle &nh)
+  void PolyTrajOptimizer::SetParameters(ros::NodeHandle &nh)
   {
-    nh.param("optimization/constraint_points_perPiece", cps_num_prePiece_, -1);
-    nh.param("optimization/weight_obstacle", wei_obs_, -1.0);
-    nh.param("optimization/weight_obstacle_soft", wei_obs_soft_, -1.0);
-    nh.param("optimization/weight_swarm", wei_swarm_, -1.0);
-    nh.param("optimization/weight_feasibility", wei_feas_, -1.0);
-    nh.param("optimization/weight_sqrvariance", wei_sqrvar_, -1.0);
-    nh.param("optimization/weight_time", wei_time_, -1.0);
-    nh.param("optimization/obstacle_clearance", obs_clearance_, -1.0);
-    nh.param("optimization/obstacle_clearance_soft", obs_clearance_soft_, -1.0);
+    nh.param("optimization/constraint_points_perPiece", constraint_points_per_piece_, -1);
+    nh.param("optimization/weight_obstacle", obstacle_weight_, -1.0);
+    nh.param("optimization/weight_obstacle_soft", soft_obstacle_weight_, -1.0);
+    nh.param("optimization/weight_swarm", swarm_weight_, -1.0);
+    nh.param("optimization/weight_feasibility", feasibility_weight_, -1.0);
+    nh.param("optimization/weight_sqrvariance", squared_variance_weight_, -1.0);
+    nh.param("optimization/weight_time", time_weight_, -1.0);
+    nh.param("optimization/obstacle_clearance", obstacle_clearance_, -1.0);
+    nh.param("optimization/obstacle_clearance_soft", soft_obstacle_clearance_, -1.0);
     nh.param("optimization/swarm_clearance", swarm_clearance_, -1.0);
-    nh.param("optimization/max_vel", max_vel_, -1.0);
-    nh.param("optimization/vel_tolerance", vel_tolerance_, -1.0);
-    nh.param("optimization/max_acc", max_acc_, -1.0);
-    nh.param("optimization/acc_tolerance", acc_tolerance_, -1.0);
-    nh.param("optimization/max_jer", max_jer_, -1.0);
+    nh.param("optimization/max_vel", max_velocity_, -1.0);
+    nh.param("optimization/vel_tolerance", velocity_tolerance_, -1.0);
+    nh.param("optimization/max_acc", max_acceleration_, -1.0);
+    nh.param("optimization/acc_tolerance", acceleration_tolerance_, -1.0);
+    nh.param("optimization/max_jer", max_jerk_, -1.0);
   }
 
-  void PolyTrajOptimizer::setEnvironment(const GridMap::Ptr &map)
+  void PolyTrajOptimizer::SetEnvironment(const GridMap::Ptr &map)
   {
     grid_map_ = map;
 
@@ -1693,19 +1704,19 @@ namespace diff_planner
     a_star_->InitializeGridMap(grid_map_, Eigen::Vector3i(100, 100, 100));
   }
 
-  void PolyTrajOptimizer::setControlPoints(const Eigen::MatrixXd &points)
+  void PolyTrajOptimizer::SetControlPoints(const Eigen::MatrixXd &points)
   {
-    cps_.points = points;
+    constraint_points_.points_ = points;
   }
 
-  void PolyTrajOptimizer::setSwarmTrajs(SwarmTrajectoryData *swarm_trajs_ptr) { swarm_trajs_ = swarm_trajs_ptr; }
+  void PolyTrajOptimizer::SetSwarmTrajectories(SwarmTrajectoryData *swarm_trajectories) { swarm_trajectories_ = swarm_trajectories; }
 
-  void PolyTrajOptimizer::setDroneId(const int drone_id) { drone_id_ = drone_id; }
+  void PolyTrajOptimizer::SetDroneId(const int drone_id) { drone_id_ = drone_id; }
 
-  void PolyTrajOptimizer::setIfTouchGoal(const bool touch_goal) { touch_goal_ = touch_goal; }
+  void PolyTrajOptimizer::SetTouchGoal(const bool touch_goal) { touch_goal_ = touch_goal; }
 
-  void PolyTrajOptimizer::setConstraintPoints(ConstraintPoints cps) { cps_ = cps; }
+  void PolyTrajOptimizer::SetConstraintPoints(ConstraintPoints constraint_points) { constraint_points_ = constraint_points; }
 
-  void PolyTrajOptimizer::setUseMultitopologyTrajs(bool use_multitopology_trajs) { multitopology_data_.use_multitopology_trajs = use_multitopology_trajs; }
+  void PolyTrajOptimizer::SetUseMultiTopologyTrajectories(bool use_multi_topology_trajectories) { multi_topology_data_.use_multi_topology_trajectories = use_multi_topology_trajectories; }
 
 } // namespace diff_planner

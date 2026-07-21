@@ -28,13 +28,13 @@ namespace diff_planner
     grid_map_->InitMap(nh);
 
     ploy_traj_opt_.reset(new PolyTrajOptimizer);
-    ploy_traj_opt_->setParam(nh);
-    ploy_traj_opt_->setEnvironment(grid_map_);
+    ploy_traj_opt_->SetParameters(nh);
+    ploy_traj_opt_->SetEnvironment(grid_map_);
 
     visualization_ = vis;
 
-    ploy_traj_opt_->setSwarmTrajs(&traj_.swarm_trajectories_);
-    ploy_traj_opt_->setDroneId(pp_.drone_id);
+    ploy_traj_opt_->SetSwarmTrajectories(&traj_.swarm_trajectories_);
+    ploy_traj_opt_->SetDroneId(pp_.drone_id);
   }
 
   bool DiffPlannerManager::reboundReplan(
@@ -55,7 +55,7 @@ namespace diff_planner
     //   cout << "Close to goal" << endl;
 
     /*** STEP 1: INIT ***/
-    ploy_traj_opt_->setIfTouchGoal(touch_goal);
+    ploy_traj_opt_->SetTouchGoal(touch_goal);
     double ts = pp_.trajectory_piece_length / pp_.max_velocity;
 
     poly_traj::MinJerkOpt initMJO;
@@ -65,9 +65,9 @@ namespace diff_planner
       return false;
     }
 
-    Eigen::MatrixXd cstr_pts = initMJO.GetInitialConstraintPoints(ploy_traj_opt_->get_cps_num_prePiece_());
+    Eigen::MatrixXd cstr_pts = initMJO.GetInitialConstraintPoints(ploy_traj_opt_->GetConstraintPointsPerPiece());
     vector<std::pair<int, int>> segments;
-    if (ploy_traj_opt_->finelyCheckAndSetConstraintPoints(segments, initMJO, true) == PolyTrajOptimizer::CHK_RET::ERR)
+    if (ploy_traj_opt_->FinelyCheckAndSetConstraintPoints(segments, initMJO, true) == PolyTrajOptimizer::CheckResult::kError)
     {
       return false;
     }
@@ -90,7 +90,7 @@ namespace diff_planner
 
     if (pp_.use_multi_topology_trajectories)
     {
-      std::vector<ConstraintPoints> trajs = ploy_traj_opt_->distinctiveTrajs(segments);
+      std::vector<ConstraintPoints> trajs = ploy_traj_opt_->GenerateDistinctiveTrajectories(segments);
       Eigen::VectorXi success = Eigen::VectorXi::Zero(trajs.size());
       poly_traj::Trajectory initTraj = initMJO.GetTrajectory();
       int PN = initTraj.GetPieceCount();
@@ -103,9 +103,9 @@ namespace diff_planner
 
       for (int i = trajs.size() - 1; i >= 0; i--)
       {
-        ploy_traj_opt_->setConstraintPoints(trajs[i]);
-        ploy_traj_opt_->setUseMultitopologyTrajs(true);
-        if (ploy_traj_opt_->optimizeTrajectory(headState, tailState,
+        ploy_traj_opt_->SetConstraintPoints(trajs[i]);
+        ploy_traj_opt_->SetUseMultiTopologyTrajectories(true);
+        if (ploy_traj_opt_->OptimizeTrajectory(headState, tailState,
                                                innerPts, initTraj.GetDurations(), final_cost))
         {
           success[i] = true;
@@ -113,12 +113,12 @@ namespace diff_planner
           if (final_cost < min_cost)
           {
             min_cost = final_cost;
-            best_MJO = ploy_traj_opt_->getMinJerkOpt();
+            best_MJO = ploy_traj_opt_->GetMinimumJerkOptimizer();
             flag_success = true;
           }
 
           // visualization
-          Eigen::MatrixXd ctrl_pts_temp = ploy_traj_opt_->getMinJerkOpt().GetInitialConstraintPoints(ploy_traj_opt_->get_cps_num_prePiece_());
+          Eigen::MatrixXd ctrl_pts_temp = ploy_traj_opt_->GetMinimumJerkOptimizer().GetInitialConstraintPoints(ploy_traj_opt_->GetConstraintPointsPerPiece());
           std::vector<Eigen::Vector3d> point_set;
           for (int j = 0; j < ctrl_pts_temp.cols(); j++)
           {
@@ -149,9 +149,9 @@ namespace diff_planner
       headState << initTraj.GetJunctionPosition(0), initTraj.GetJunctionVelocity(0), initTraj.GetJunctionAcceleration(0);
       tailState << initTraj.GetJunctionPosition(PN), initTraj.GetJunctionVelocity(PN), initTraj.GetJunctionAcceleration(PN);
       double final_cost;
-      flag_success = ploy_traj_opt_->optimizeTrajectory(headState, tailState,
+      flag_success = ploy_traj_opt_->OptimizeTrajectory(headState, tailState,
                                                         innerPts, initTraj.GetDurations(), final_cost);
-      best_MJO = ploy_traj_opt_->getMinJerkOpt();
+      best_MJO = ploy_traj_opt_->GetMinimumJerkOptimizer();
 
       t_opt = ros::Time::now() - t_start;
     }
@@ -172,14 +172,14 @@ namespace diff_planner
       //      << ",avg_time=" << sum_time / count_success << endl;
 
       setLocalTrajFromOpt(best_MJO, touch_goal);
-      cstr_pts = best_MJO.GetInitialConstraintPoints(ploy_traj_opt_->get_cps_num_prePiece_());
+      cstr_pts = best_MJO.GetInitialConstraintPoints(ploy_traj_opt_->GetConstraintPointsPerPiece());
       visualization_->DisplayOptimalList(cstr_pts, 0);
 
       continous_failures_count_ = 0;
     }
     else
     {
-      cstr_pts = ploy_traj_opt_->getMinJerkOpt().GetInitialConstraintPoints(ploy_traj_opt_->get_cps_num_prePiece_());
+      cstr_pts = ploy_traj_opt_->GetMinimumJerkOptimizer().GetInitialConstraintPoints(ploy_traj_opt_->GetConstraintPointsPerPiece());
       visualization_->DisplayFailedList(cstr_pts, 0);
 
       continous_failures_count_++;
@@ -371,7 +371,7 @@ namespace diff_planner
     poly_traj::Trajectory traj = opt.GetTrajectory();
     Eigen::MatrixXd cps = opt.GetInitialConstraintPoints(getCpsNumPrePiece());
     PointsToCheck pts_to_check;
-    bool ret = ploy_traj_opt_->computePointsToCheck(traj, ConstraintPoints::two_thirds_id(cps, touch_goal), pts_to_check);
+    bool ret = ploy_traj_opt_->ComputePointsToCheck(traj, ConstraintPoints::TwoThirdsIndex(cps, touch_goal), pts_to_check);
     if (ret && pts_to_check.size() >= 1 && pts_to_check.back().size() >= 1)
     {
       traj_.SetLocalTrajectory(traj, pts_to_check, ros::Time::now().toSec());

@@ -50,8 +50,8 @@ namespace diff_planner
     bool EmergencyStop(Eigen::Vector3d stop_pos);
     bool checkCollision(int drone_id);
     bool setLocalTrajFromOpt(const poly_traj::MinJerkOpt &opt, const bool touch_goal);
-    inline double getSwarmClearance(void) { return ploy_traj_opt_->get_swarm_clearance_(); }
-    inline int getCpsNumPrePiece(void) { return ploy_traj_opt_->get_cps_num_prePiece_(); }
+    inline double getSwarmClearance(void) { return ploy_traj_opt_->GetSwarmClearance(); }
+    inline int getCpsNumPrePiece(void) { return ploy_traj_opt_->GetConstraintPointsPerPiece(); }
     // inline PointsToCheck getPtsCheck(void) { return ploy_traj_opt_->get_pts_check_(); }
 
     PlanParameters pp_;
