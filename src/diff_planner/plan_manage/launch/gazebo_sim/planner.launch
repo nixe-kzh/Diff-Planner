@@ -1,0 +1,38 @@
+<launch>
+  <arg name="map_size_x"/>
+  <arg name="map_size_y"/>
+  <arg name="map_size_z"/>
+  <arg name="odometry_topic"/>
+  <arg name="point_cloud_topic"/>
+  <arg name="goal_topic"/>
+  <arg name="flight_type"/>
+  <arg name="max_velocity"/>
+  <arg name="max_acceleration"/>
+  <arg name="max_jerk"/>
+  <arg name="planning_horizon"/>
+  <arg name="use_multi_topology_trajectories"/>
+
+  <node pkg="diff_planner" type="diff_planner_node" name="diff_planner_node"
+        output="screen">
+    <remap from="~odom_world" to="$(arg odometry_topic)"/>
+    <remap from="~mandatory_stop" to="/mandatory_stop_to_planner"/>
+    <remap from="~planning/trajectory" to="/planning/trajectory"/>
+    <remap from="~planning/data_display" to="/planning/data_display"/>
+    <remap from="~planning/broadcast_traj_send"
+           to="/broadcast_traj_from_planner"/>
+    <remap from="~planning/broadcast_traj_recv"
+           to="/broadcast_traj_to_planner"/>
+    <remap from="~planning/heartbeat" to="/traj_server/heartbeat"/>
+    <remap from="/goal" to="$(arg goal_topic)"/>
+
+    <remap from="~grid_map/odom" to="$(arg odometry_topic)"/>
+    <remap from="~grid_map/cloud" to="$(arg point_cloud_topic)"/>
+    <!-- LiDAR mode keeps the unused camera inputs mapped to valid ROS names. -->
+    <remap from="~grid_map/pose" to="unused_camera_pose"/>
+    <remap from="~grid_map/depth" to="unused_depth"/>
+
+    <rosparam command="load"
+              file="$(find diff_planner)/launch/gazebo_sim/planner_params.yaml"
+              subst_value="true"/>
+  </node>
+</launch>

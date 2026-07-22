@@ -1,5 +1,5 @@
-#ifndef _PLAN_CONTAINER_H_
-#define _PLAN_CONTAINER_H_
+#ifndef DIFF_PLANNER_TRAJ_UTILS_INCLUDE_TRAJ_UTILS_PLAN_CONTAINER_HPP_
+#define DIFF_PLANNER_TRAJ_UTILS_INCLUDE_TRAJ_UTILS_PLAN_CONTAINER_HPP_
 
 #include <Eigen/Eigen>
 #include <vector>
@@ -7,80 +7,80 @@
 
 #include <optimizer/poly_traj_utils.hpp>
 
-using std::vector;
-
 namespace diff_planner
 {
 
-  typedef std::vector<std::vector<std::pair<double, Eigen::Vector3d>>> PtsChk_t;
+  using PointsToCheck = std::vector<std::vector<std::pair<double, Eigen::Vector3d>>>;
 
-  struct GlobalTrajData
+  struct GlobalTrajectoryData
   {
-    poly_traj::Trajectory traj;
+    poly_traj::Trajectory trajectory;
     double global_start_time; // world time
     double duration;
 
     /* Global traj time. 
        The corresponding global trajectory time of the current local target.
        Used in local target selection process */
-    double glb_t_of_lc_tgt;
+    double local_target_time;
     /* Global traj time. 
        The corresponding global trajectory time of the last local target.
        Used in initial-path-from-last-optimal-trajectory generation process */
-    double last_glb_t_of_lc_tgt;
+    double previous_local_target_time;
   };
 
-  struct LocalTrajData
+  struct LocalTrajectoryData
   {
-    poly_traj::Trajectory traj;
-    PtsChk_t pts_chk;
+    poly_traj::Trajectory trajectory;
+    PointsToCheck points_to_check;
     int drone_id; // A negative value indicates no received trajectories.
-    int traj_id;
+    int trajectory_id;
     double duration;
     double start_time; // world time
     double end_time;   // world time
-    Eigen::Vector3d start_pos;
-    double des_clearance;
+    Eigen::Vector3d start_position;
+    double desired_clearance;
 
   };
 
-  typedef std::vector<LocalTrajData> SwarmTrajData;
+  using SwarmTrajectoryData = std::vector<LocalTrajectoryData>;
 
-  class TrajContainer
+  class TrajectoryContainer
   {
   public:
-    GlobalTrajData global_traj;
-    LocalTrajData local_traj;
-    SwarmTrajData swarm_traj;
+    GlobalTrajectoryData global_trajectory_;
+    LocalTrajectoryData local_trajectory_;
+    SwarmTrajectoryData swarm_trajectories_;
 
-    TrajContainer()
+    TrajectoryContainer()
     {
-      local_traj.traj_id = 0;
+      local_trajectory_.trajectory_id = 0;
     }
-    ~TrajContainer() {}
+    ~TrajectoryContainer() {}
 
-    void setGlobalTraj(const poly_traj::Trajectory &trajectory, const double &world_time)
+    void SetGlobalTrajectory(const poly_traj::Trajectory &trajectory, const double &world_time)
     {
-      global_traj.traj = trajectory;
-      global_traj.duration = trajectory.getTotalDuration();
-      global_traj.global_start_time = world_time;
-      global_traj.glb_t_of_lc_tgt = world_time;
-      global_traj.last_glb_t_of_lc_tgt = -1.0;
+      global_trajectory_.trajectory = trajectory;
+      global_trajectory_.duration = trajectory.GetTotalDuration();
+      global_trajectory_.global_start_time = world_time;
+      global_trajectory_.local_target_time = world_time;
+      global_trajectory_.previous_local_target_time = -1.0;
 
-      local_traj.drone_id = -1;
-      local_traj.duration = 0.0;
-      local_traj.traj_id = 0;
+      local_trajectory_.drone_id = -1;
+      local_trajectory_.duration = 0.0;
+      local_trajectory_.trajectory_id = 0;
     }
 
-    void setLocalTraj(const poly_traj::Trajectory &trajectory, const PtsChk_t &pts_to_chk, const double &world_time, const int drone_id = -1)
+    void SetLocalTrajectory(const poly_traj::Trajectory &trajectory,
+                            const PointsToCheck &points_to_check,
+                            const double &world_time, const int drone_id = -1)
     {
-      local_traj.drone_id = drone_id;
-      local_traj.traj_id++;
-      local_traj.duration = trajectory.getTotalDuration();
-      local_traj.start_pos = trajectory.getJuncPos(0);
-      local_traj.start_time = world_time;
-      local_traj.traj = trajectory;
-      local_traj.pts_chk = pts_to_chk;
+      local_trajectory_.drone_id = drone_id;
+      local_trajectory_.trajectory_id++;
+      local_trajectory_.duration = trajectory.GetTotalDuration();
+      local_trajectory_.start_position = trajectory.GetJunctionPosition(0);
+      local_trajectory_.start_time = world_time;
+      local_trajectory_.trajectory = trajectory;
+      local_trajectory_.points_to_check = points_to_check;
     }
 
   };
@@ -88,20 +88,20 @@ namespace diff_planner
   struct PlanParameters
   {
     /* planning algorithm parameters */
-    double max_vel_, max_acc_;     // physical limits
-    double polyTraj_piece_length;  // distance between adjacient B-spline control points
-    double feasibility_tolerance_; // permitted ratio of vel/acc exceeding limits
-    double planning_horizen_;
-    bool use_multitopology_trajs;
+    double max_velocity, max_acceleration; // physical limits
+    double trajectory_piece_length;       // distance between adjacent trajectory points
+    double feasibility_tolerance;         // permitted ratio of vel/acc exceeding limits
+    double planning_horizon;
+    bool use_multi_topology_trajectories;
     bool touch_goal;
     int drone_id; // single drone: drone_id <= -1, swarm: drone_id >= 0
 
     /* processing time */
-    double time_search_ = 0.0;
-    double time_optimize_ = 0.0;
-    double time_adjust_ = 0.0;
+    double search_time = 0.0;
+    double optimization_time = 0.0;
+    double adjustment_time = 0.0;
   };
 
 } // namespace diff_planner
 
-#endif
+#endif  // DIFF_PLANNER_TRAJ_UTILS_INCLUDE_TRAJ_UTILS_PLAN_CONTAINER_HPP_

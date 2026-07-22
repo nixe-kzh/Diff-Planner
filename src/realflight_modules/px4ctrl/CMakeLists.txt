@@ -15,27 +15,28 @@ find_package(catkin REQUIRED COMPONENTS
   sensor_msgs
   uav_utils
   mavros
+  rosfmt
 )
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
-find_package(Eigen3 REQUIRED) 
+find_package(Eigen3 REQUIRED)
 
 catkin_package(
+  INCLUDE_DIRS include
 )
 
 include_directories(
+  include
   ${catkin_INCLUDE_DIRS}
   ${EIGEN_INCLUDE_DIRS}
-  include/${PROJECT_NAME}
-  include
 )
 
-add_executable(px4ctrl_node 
-  src/px4ctrl_node.cpp
-  src/PX4CtrlFSM.cpp
-  src/PX4CtrlParam.cpp
+add_executable(px4ctrl_node
+  src/px4ctrl_main_node.cpp
+  src/control_fsm.cpp
+  src/parameters.cpp
   src/controller.cpp
-  src/input.cpp
+  src/input_data.cpp
 )
 
 add_dependencies(px4ctrl_node quadrotor_msgs)
@@ -44,6 +45,10 @@ target_link_libraries(px4ctrl_node
   ${catkin_LIBRARIES}
 )
 
-catkin_install_python(PROGRAMS thrust_calibrate_scrips/thrust_calibrate.py
+install(DIRECTORY include/${PROJECT_NAME}/
+  DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
+)
+
+catkin_install_python(PROGRAMS scripts/thrust_calibrate.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )

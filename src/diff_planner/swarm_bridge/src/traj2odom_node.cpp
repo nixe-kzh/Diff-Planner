@@ -92,13 +92,13 @@ void one_traj_sub_cb(const traj_utils::MINCOTrajPtr &msg)
   for (int i = 0; i < piece_nums; i++)
     durations(i) = msg->duration[i];
   poly_traj::MinJerkOpt MJO;
-  MJO.reset(headState, tailState, piece_nums);
-  MJO.generate(innerPts, durations);
+  MJO.Reset(headState, tailState, piece_nums);
+  MJO.Generate(innerPts, durations);
 
-  trajs_[recv_id].traj = MJO.getTraj();
+  trajs_[recv_id].traj = MJO.GetTrajectory();
   trajs_[recv_id].start_time = msg->start_time;
   trajs_[recv_id].valid = true;
-  trajs_[recv_id].duration = trajs_[recv_id].traj.getTotalDuration();
+  trajs_[recv_id].duration = trajs_[recv_id].traj.GetTotalDuration();
 }
 
 int main(int argc, char **argv)
@@ -125,8 +125,8 @@ int main(int argc, char **argv)
         if (t_to_start <= trajs_[id].duration)
         {
           double t = t_to_start;
-          Eigen::Vector3d p = trajs_[id].traj.getPos(t);
-          Eigen::Vector3d v = trajs_[id].traj.getVel(t);
+          Eigen::Vector3d p = trajs_[id].traj.GetPosition(t);
+          Eigen::Vector3d v = trajs_[id].traj.GetVelocity(t);
           double yaw = v.head(2).norm() > 0.01 ? atan2(v(1), v(0)) : trajs_[id].last_yaw; //
           trajs_[id].last_yaw = yaw;
           Eigen::AngleAxisd rotation_vector(yaw, Eigen::Vector3d::UnitZ());

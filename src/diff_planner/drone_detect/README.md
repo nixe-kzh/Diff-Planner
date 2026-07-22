@@ -76,7 +76,7 @@ estimate/drone_height: 0.1
 
   The camere pose from pcl_render_node
 
-The above three topics are synchronized when in use, the callback function is **`rcvDepthColorCamPoseCallback`**
+The above three topics are synchronized when in use, the callback function is **`DepthColorCameraPoseCallback`**
 
 - **`/dronex_odom_sub_`** ([nav_msgs::Odometry])
 

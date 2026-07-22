@@ -18,11 +18,11 @@
 //   signal(SIGTERM,SignalHandler);
 
 //   ros::init(argc, argv, "diff_planner_node", ros::init_options::NoSigintHandler);
-//   ros::NodeHandle nh("~");
+//   ros::NodeHandle node_handle("~");
 
-//   DiffReplanFSM rebo_replan;
+//   DiffReplanFSM replanning_state_machine;
 
-//   rebo_replan.init(nh);
+//   replanning_state_machine.Init(node_handle);
 
 //   // ros::Duration(1.0).sleep();
 //   ros::AsyncSpinner async_spinner(4);
@@ -43,11 +43,11 @@ int main(int argc, char **argv)
 {
 
   ros::init(argc, argv, "diff_planner_node");
-  ros::NodeHandle nh("~");
+  ros::NodeHandle node_handle("~");
 
-  DiffReplanFSM rebo_replan;
+  DiffReplanFSM replanning_state_machine;
 
-  rebo_replan.init(nh);
+  replanning_state_machine.Init(node_handle);
 
   // ros::Duration(1.0).sleep();
   ros::spin();

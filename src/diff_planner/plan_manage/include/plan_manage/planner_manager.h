@@ -1,7 +1,10 @@
-#ifndef _PLANNER_MANAGER_H_
-#define _PLANNER_MANAGER_H_
+#ifndef DIFF_PLANNER_PLAN_MANAGE_INCLUDE_PLAN_MANAGE_PLANNER_MANAGER_H_
+#define DIFF_PLANNER_PLAN_MANAGE_INCLUDE_PLAN_MANAGE_PLANNER_MANAGER_H_
 
 #include <stdlib.h>
+
+#include <memory>
+#include <vector>
 
 #include <optimizer/poly_traj_optimizer.h>
 #include <traj_utils/DataDisp.h>
@@ -27,49 +30,63 @@ namespace diff_planner
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
     /* main planning interface */
-    void initPlanModules(ros::NodeHandle &nh, PlanningVisualization::Ptr vis = NULL);
-    bool computeInitState(
-        const Eigen::Vector3d &start_pt, const Eigen::Vector3d &start_vel,
-        const Eigen::Vector3d &start_acc, const Eigen::Vector3d &local_target_pt,
-        const Eigen::Vector3d &local_target_vel, const bool flag_polyInit,
-        const bool flag_randomPolyTraj, const double &ts, poly_traj::MinJerkOpt &initMJO);
-    bool reboundReplan(
-        const Eigen::Vector3d &start_pt, const Eigen::Vector3d &start_vel,
-        const Eigen::Vector3d &start_acc, const Eigen::Vector3d &end_pt,
-        const Eigen::Vector3d &end_vel, const bool flag_polyInit,
-        const bool flag_randomPolyTraj, const bool touch_goal);
-    bool planGlobalTrajWaypoints(
-        const Eigen::Vector3d &start_pos, const Eigen::Vector3d &start_vel,
-        const Eigen::Vector3d &start_acc, const std::vector<Eigen::Vector3d> &waypoints,
-        const Eigen::Vector3d &end_vel, const Eigen::Vector3d &end_acc);
-    void getLocalTarget(
-        const double planning_horizen,
-        const Eigen::Vector3d &start_pt, const Eigen::Vector3d &global_end_pt,
-        Eigen::Vector3d &local_target_pos, Eigen::Vector3d &local_target_vel,
+    void InitPlanModules(ros::NodeHandle &node_handle,
+                         PlanningVisualization::Ptr visualization = nullptr);
+    bool ComputeInitialState(
+        const Eigen::Vector3d &start_point, const Eigen::Vector3d &start_velocity,
+        const Eigen::Vector3d &start_acceleration,
+        const Eigen::Vector3d &local_target_point,
+        const Eigen::Vector3d &local_target_velocity,
+        bool use_polynomial_initialization,
+        bool use_random_polynomial_trajectory, double piece_duration,
+        poly_traj::MinJerkOpt &initial_jerk_optimizer);
+    bool ReboundReplan(
+        const Eigen::Vector3d &start_point, const Eigen::Vector3d &start_velocity,
+        const Eigen::Vector3d &start_acceleration,
+        const Eigen::Vector3d &local_target_point,
+        const Eigen::Vector3d &local_target_velocity,
+        bool use_polynomial_initialization,
+        bool use_random_polynomial_trajectory, bool touch_goal);
+    bool PlanGlobalTrajectoryWaypoints(
+        const Eigen::Vector3d &start_position,
+        const Eigen::Vector3d &start_velocity,
+        const Eigen::Vector3d &start_acceleration,
+        const std::vector<Eigen::Vector3d> &waypoints,
+        const Eigen::Vector3d &end_velocity,
+        const Eigen::Vector3d &end_acceleration);
+    void GetLocalTarget(
+        double planning_horizon,
+        const Eigen::Vector3d &start_point,
+        const Eigen::Vector3d &global_end_point,
+        Eigen::Vector3d &local_target_position,
+        Eigen::Vector3d &local_target_velocity,
         bool &touch_goal);
-    bool EmergencyStop(Eigen::Vector3d stop_pos);
-    bool checkCollision(int drone_id);
-    bool setLocalTrajFromOpt(const poly_traj::MinJerkOpt &opt, const bool touch_goal);
-    inline double getSwarmClearance(void) { return ploy_traj_opt_->get_swarm_clearance_(); }
-    inline int getCpsNumPrePiece(void) { return ploy_traj_opt_->get_cps_num_prePiece_(); }
-    // inline PtsChk_t getPtsCheck(void) { return ploy_traj_opt_->get_pts_check_(); }
-
-    PlanParameters pp_;
+    bool EmergencyStop(Eigen::Vector3d stop_position);
+    bool CheckCollision(int drone_id);
+    bool SetLocalTrajectoryFromOptimizer(
+        const poly_traj::MinJerkOpt &optimizer, bool touch_goal);
+    inline double GetSwarmClearance() const {
+      return trajectory_optimizer_->GetSwarmClearance();
+    }
+    inline int GetConstraintPointsPerPiece() const {
+      return trajectory_optimizer_->GetConstraintPointsPerPiece();
+    }
+    PlanParameters plan_parameters_;
     GridMap::Ptr grid_map_;
-    TrajContainer traj_;
+    TrajectoryContainer trajectory_container_;
 
   private:
     PlanningVisualization::Ptr visualization_;
 
-    PolyTrajOptimizer::Ptr ploy_traj_opt_;
+    PolyTrajOptimizer::Ptr trajectory_optimizer_;
 
-    int continous_failures_count_{0};
+    int continuous_failure_count_{0};
 
   public:
-    typedef unique_ptr<DiffPlannerManager> Ptr;
+    using Ptr = std::unique_ptr<DiffPlannerManager>;
 
     // !SECTION
   };
-} // namespace diff_planner
+}  // namespace diff_planner
 
-#endif
+#endif  // DIFF_PLANNER_PLAN_MANAGE_INCLUDE_PLAN_MANAGE_PLANNER_MANAGER_H_
