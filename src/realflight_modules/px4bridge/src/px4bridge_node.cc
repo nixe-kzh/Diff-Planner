@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cstdint>
 #include <exception>
+#include <mutex>
 #include <stdexcept>
 
 namespace px4bridge {
@@ -29,12 +30,12 @@ class Px4Bridge {
     vision_pose_publisher_ =
         private_node_handle_.advertise<geometry_msgs::PoseStamped>("vision_pose", 10);
 
-    odometry_subscriber_ = 
+    odometry_subscriber_ =
         private_node_handle_.subscribe("odom", 1, &Px4Bridge::OdometryCallback,
                                        this, ros::TransportHints().tcpNoDelay());
 
     // 定时器定义最大发送频率；只有收到新的 odometry 才会发布。
-    publish_timer_ = 
+    publish_timer_ =
         private_node_handle_.createTimer(ros::Duration(1.0 / vision_pose_rate_hz_),
                                          &Px4Bridge::PublishVisionPose, this);
 
@@ -82,46 +83,72 @@ class Px4Bridge {
       return;
     }
 
-    latest_vision_pose_.header = odometry->header;
-    latest_vision_pose_.pose = odometry->pose.pose;
+    geometry_msgs::PoseStamped vision_pose;
+    vision_pose.header = odometry->header;
+    vision_pose.pose = odometry->pose.pose;
 
     // PX4 会校验姿态四元数，这里先归一化以消除数值积分产生的小误差。
     const double inverse_quaternion_norm = 1.0 / std::sqrt(quaternion_norm_squared);
-    latest_vision_pose_.pose.orientation.x *= inverse_quaternion_norm;
-    latest_vision_pose_.pose.orientation.y *= inverse_quaternion_norm;
-    latest_vision_pose_.pose.orientation.z *= inverse_quaternion_norm;
-    latest_vision_pose_.pose.orientation.w *= inverse_quaternion_norm;
+    vision_pose.pose.orientation.x *= inverse_quaternion_norm;
+    vision_pose.pose.orientation.y *= inverse_quaternion_norm;
+    vision_pose.pose.orientation.z *= inverse_quaternion_norm;
+    vision_pose.pose.orientation.w *= inverse_quaternion_norm;
 
-    latest_odometry_receive_time_ = ros::Time::now();
-
-    // 优先保留 LIO 的测量时间戳，MAVROS 会用它生成 MAVLink usec，并丢弃与上一帧时间戳完全相同的消息
-    if (latest_vision_pose_.header.stamp.isZero()) {
-      latest_vision_pose_.header.stamp = latest_odometry_receive_time_;
+    // 优先保留 LIO 的测量时间戳。时间戳为零时才使用本机 ROS 时间。
+    if (vision_pose.header.stamp.isZero()) {
+      vision_pose.header.stamp = ros::Time::now();
     }
-    ++latest_odometry_sequence_;
 
+    const ros::SteadyTime receive_time = ros::SteadyTime::now();
+    std::lock_guard<std::mutex> lock(state_mutex_);
+
+    // MAVROS 会丢弃重复时间戳；主动检查可以直接暴露上游重复发布旧帧的问题。
+    if (latest_odometry_sequence_ != 0 &&
+        vision_pose.header.stamp <= latest_vision_pose_.header.stamp) {
+      ROS_WARN_THROTTLE(
+          1.0,
+          "Discarding LIO odometry with a repeated or decreasing timestamp.");
+      return;
+    }
+
+    latest_vision_pose_ = vision_pose;
+    latest_odometry_receive_time_ = receive_time;
+    ++latest_odometry_sequence_;
   }
 
   void PublishVisionPose(const ros::TimerEvent&) {
-    if (latest_odometry_sequence_ == 0) {
-      ROS_WARN_THROTTLE(5.0, "Waiting for LIO odometry.");
-      return;
+    geometry_msgs::PoseStamped vision_pose;
+
+    {
+      std::lock_guard<std::mutex> lock(state_mutex_);
+
+      if (latest_odometry_sequence_ == 0) {
+        ROS_WARN_THROTTLE(5.0, "Waiting for LIO odometry.");
+        return;
+      }
+
+      // 单调时钟不受 NTP、系统校时和 ROS 仿真时间跳变影响。
+      const double odometry_age_sec =
+          (ros::SteadyTime::now() - latest_odometry_receive_time_).toSec();
+      if (odometry_age_sec > odometry_timeout_sec_) {
+        ROS_WARN_THROTTLE(
+            1.0,
+            "LIO odometry timed out (age: %.3f s); vision pose paused.",
+            odometry_age_sec);
+        return;
+      }
+
+      // 不重复发布同一帧，避免 MAVROS 因时间戳相同再次丢弃消息。
+      if (latest_odometry_sequence_ == published_odometry_sequence_) {
+        return;
+      }
+
+      vision_pose = latest_vision_pose_;
+      published_odometry_sequence_ = latest_odometry_sequence_;
     }
 
-    const double odometry_age_sec = (ros::Time::now() - latest_odometry_receive_time_).toSec();
-    if (odometry_age_sec > odometry_timeout_sec_) {
-      ROS_WARN_THROTTLE(1.0, "LIO odometry timed out (age: %.3f s); vision pose paused.",
-                        odometry_age_sec);
-      return;
-    }
-
-    // 不重复发布同一帧，避免 MAVROS 因时间戳相同再次丢弃消息
-    if (latest_odometry_sequence_ == published_odometry_sequence_) {
-      return;
-    }
-
-    vision_pose_publisher_.publish(latest_vision_pose_);
-    published_odometry_sequence_ = latest_odometry_sequence_;
+    // 在锁外发布，避免 ROS 通信操作阻塞 odometry 回调。
+    vision_pose_publisher_.publish(vision_pose);
   }
 
   static bool IsPoseFinite(const geometry_msgs::Pose& pose) {
@@ -136,8 +163,9 @@ class Px4Bridge {
   ros::Subscriber odometry_subscriber_;
   ros::Timer publish_timer_;
 
+  std::mutex state_mutex_;
   geometry_msgs::PoseStamped latest_vision_pose_;
-  ros::Time latest_odometry_receive_time_;
+  ros::SteadyTime latest_odometry_receive_time_;
   std::uint64_t latest_odometry_sequence_ = 0;
   std::uint64_t published_odometry_sequence_ = 0;
 
@@ -152,7 +180,10 @@ int main(int argc, char** argv) {
 
   try {
     px4bridge::Px4Bridge bridge;
-    ros::spin();
+    // odometry 与发布定时器分线程执行，避免高负载时互相阻塞回调。
+    ros::AsyncSpinner spinner(2);
+    spinner.start();
+    ros::waitForShutdown();
   } catch (const std::exception& exception) {
     ROS_FATAL_STREAM("Failed to start PX4 bridge: " << exception.what());
     return 1;
