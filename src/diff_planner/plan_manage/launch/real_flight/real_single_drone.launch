@@ -1,0 +1,73 @@
+<launch>
+  <!--
+    Single-drone planner for real flight with LIO odometry and LiDAR mapping.
+    This launch file does not start localization, MAVROS, or the controller by
+    default. Verify all sensor topics and vehicle safety settings before flight.
+  -->
+  <arg name="map_size_x" default="100.0"/>
+  <arg name="map_size_y" default="100.0"/>
+  <arg name="map_size_z" default="3.0"/>
+
+  <arg name="odometry_topic" default="/ekf/ekf_odom"/>
+  <arg name="point_cloud_topic"
+       default="/laserMapping/cloud_registered"/>
+  <arg name="goal_topic" default="/move_base_simple/goal"/>
+
+  <!-- Point cloud offsets can align a sensor map whose origin is not world. -->
+  <arg name="map_init_x" default="0.0"/>
+  <arg name="map_init_y" default="0.0"/>
+  <arg name="map_init_z" default="0.0"/>
+
+  <!-- flight_type: 1 = interactive goal, 2 = predefined waypoints. -->
+  <arg name="flight_type" default="1"/>
+  <arg name="max_velocity" default="0.5"/>
+  <arg name="max_acceleration" default="3.0"/>
+  <arg name="max_jerk" default="20.0"/>
+  <arg name="planning_horizon" default="7.5"/>
+  <arg name="use_multi_topology_trajectories" default="false"/>
+
+  <arg name="enable_rviz" default="true"/>
+  <!-- Opt in only after MAVROS, odometry, RC, and failsafes are verified. -->
+  <arg name="start_px4ctrl" default="false"/>
+  <arg name="rviz_config"
+       default="$(find diff_planner)/launch/real_flight/single_drone.rviz"/>
+
+  <!-- Real flight must use wall time, never Gazebo simulation time. -->
+  <param name="/use_sim_time" value="false"/>
+
+  <include file="$(find diff_planner)/launch/real_flight/planner.launch">
+    <arg name="map_size_x" value="$(arg map_size_x)"/>
+    <arg name="map_size_y" value="$(arg map_size_y)"/>
+    <arg name="map_size_z" value="$(arg map_size_z)"/>
+    <arg name="odometry_topic" value="$(arg odometry_topic)"/>
+    <arg name="point_cloud_topic" value="$(arg point_cloud_topic)"/>
+    <arg name="goal_topic" value="$(arg goal_topic)"/>
+    <arg name="map_init_x" value="$(arg map_init_x)"/>
+    <arg name="map_init_y" value="$(arg map_init_y)"/>
+    <arg name="map_init_z" value="$(arg map_init_z)"/>
+    <arg name="flight_type" value="$(arg flight_type)"/>
+    <arg name="max_velocity" value="$(arg max_velocity)"/>
+    <arg name="max_acceleration" value="$(arg max_acceleration)"/>
+    <arg name="max_jerk" value="$(arg max_jerk)"/>
+    <arg name="planning_horizon" value="$(arg planning_horizon)"/>
+    <arg name="use_multi_topology_trajectories"
+         value="$(arg use_multi_topology_trajectories)"/>
+  </include>
+
+  <node pkg="diff_planner" type="traj_server" name="traj_server"
+        output="screen">
+    <remap from="position_cmd" to="/setpoints_cmd"/>
+    <remap from="~planning/trajectory" to="/planning/trajectory"/>
+    <remap from="~planning/yaw" to="/planning/yaw"/>
+    <remap from="~heartbeat" to="/traj_server/heartbeat"/>
+    <param name="traj_server/time_forward" value="1.0" type="double"/>
+    <param name="traj_server/yaw_dot_max" value="3.14" type="double"/>
+    <param name="traj_server/yaw_dot_dot_max" value="15.71" type="double"/>
+  </node>
+
+  <include if="$(arg start_px4ctrl)"
+           file="$(find px4ctrl)/launch/run_ctrl_real.launch"/>
+
+  <node if="$(arg enable_rviz)" pkg="rviz" type="rviz" name="rviz"
+        args="-d $(arg rviz_config)" output="screen"/>
+</launch>

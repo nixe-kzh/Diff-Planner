@@ -1,6 +1,6 @@
 <launch>
   <node pkg="px4ctrl" type="px4ctrl_node" name="px4ctrl" output="screen">
-    <remap from="~odom" to="/vins/imu_propagate" />
+    <remap from="~odom" to="/Odometry_high_rate" />
     <remap from="~cmd" to="/setpoints_cmd" />
 
     <rosparam command="load" file="$(find px4ctrl)/config/real_flight.yaml" />
