@@ -1,0 +1,8 @@
+# ROS/catkin build artifacts
+build/
+devel/
+
+# Python bytecode and cache directories
+*.pyc
+*.pyo
+__pycache__/

@@ -1,106 +1,98 @@
-# firefly web
-https://wiki.t-firefly.com/zh_CN/ROC-RK3588S-PC/index.html
+# 实机飞行模块
 
-# realflight
+本目录包含 LIO、PX4 通信与控制相关模块。
+Firefly ROC-RK3588S-PC 的系统资料见[官方文档](https://wiki.t-firefly.com/zh_CN/ROC-RK3588S-PC/index.html)。
 
-依赖安装:
-```
-#PCL
-sudo apt install -y libpcl-dev
-#Ompl
-sudo apt install -y libompl-dev ompl-demos
-#Egien
-sudo apt install -y libeigen3-dev
-# Glog
-sudo apt install -y libgoogle-glog-dev
-# Fmt
-sudo apt install -y libfmt-dev
-sudo apt install -y ros-noetic-rosfmt
+## 1. 拉取源码
 
-sudo apt install -y build-essential cmake
-sudo apt install -y libpcap-dev
-sudo apt install -y \
-  git cmake build-essential pkg-config \
-  libapr1-dev libaprutil1-dev \
-  libboost-all-dev \
-  ros-${ROS_DISTRO}-pcl-ros \
-  ros-${ROS_DISTRO}-pcl-conversions
+首次克隆仓库时建议同时初始化 submodule：
+
+```bash
+git clone -b dev_nanobot --recurse-submodules https://github.com/zhan994/Diff-Planner.git
 ```
 
-mavros:
+仓库已存在时，使用以下命令拉取 FAST_LIO：
+
+```bash
+git submodule update --init --recursive
 ```
+
+按使用的雷达安装对应驱动：
+
+```bash
+# RoboSense
+git clone https://github.com/RoboSense-LiDAR/rslidar_sdk.git \
+  src/realflight_modules/rslidar_sdk
+git -C src/realflight_modules/rslidar_sdk submodule update --init --recursive
+
+
+```
+
+## 2. 安装依赖
+
+以下命令适用于 ROS Noetic：
+
+```bash
 sudo apt update
-sudo apt install ros-noetic-mavros ros-noetic-mavros-extras 
+sudo apt install -y \
+  build-essential cmake git pkg-config \
+  libapr1-dev libaprutil1-dev libboost-all-dev \
+  libeigen3-dev libfmt-dev libgoogle-glog-dev \
+  libompl-dev ompl-demos libpcap-dev libpcl-dev \
+  ros-noetic-pcl-conversions ros-noetic-pcl-ros \
+  ros-noetic-rosfmt
+```
+
+安装 MAVROS 及 GeographicLib 数据集：
+
+```bash
+sudo apt install -y ros-noetic-mavros ros-noetic-mavros-extras
 sudo /opt/ros/noetic/lib/mavros/install_geographiclib_datasets.sh
 ```
 
-# LIO
+使用 Livox 雷达时，还需安装Livox驱动：
 
-```
-
+```bash
+# Livox SDK2
 git clone https://github.com/Livox-SDK/Livox-SDK2.git
-cd ./Livox-SDK2/
+cd Livox-SDK2
 mkdir build && cd build
-cmake .. && make -j
+cmake ..
+make -j
 sudo make install
+
+# Livox
+git clone https://github.com/Livox-SDK/livox_ros_driver2.git \
+  src/realflight_modules/livox_ros_driver2
 ```
 
+## 3. 配置 RoboSense 雷达
 
-```
-# Diff planner
-git clone -b dev_nanobot https://github.com/zhan994/Diff-Planner.git
-# 雷达驱动
-git clone https://github.com/RoboSense-LiDAR/rslidar_sdk.git ~/Diff-Planner/src/realflight_modules/rslidar_sdk
+在 `rslidar_sdk/config/config.yaml` 中设置雷达型号和 IMU 端口：
 
-cd ~/Diff-Planner/src/realflight_modules/rslidar_sdk
-git submodule init
-git submodule update
-
-# FAST-LIO
-git clone https://github.com/Livox-SDK/livox_ros_driver2.git ~/Diff-Planner/src/realflight_modules/livox_ros_driver2
-git clone -b dev_nanobot https://github.com/zhan994/FAST_LIO.git ~/Diff-Planner/src/realflight_modules/FAST_LIO
+```yaml
+lidar_type: RSAIRY
+imu_port: 6688
 ```
 
-编译：
-```
-cd Diff-Planner
-catkin_make
-```
-# 雷达驱动修改
+在 `rslidar_sdk/CMakeLists.txt` 中开启 IMU 数据解析，并将点云类型设为 `XYZIRT`：
 
-- 指定雷达型号
-
-修改 config 文件夹的 config.yaml 参数
-
-`lidar_type: RSAIRY `
-
-
-- 指定IMU 端口
-
-修改 config 文件夹的 config.yaml 参数
-
-`imu_port: 6688`
-
-- 开启IMU
-
-修改CMakeList参数：
-
-```
-ENABLE_IMU_DATA_PARSE = ON
-```
-- 设置点云格式：
-修改CMakeList参数：
-```
+```cmake
+set(ENABLE_IMU_DATA_PARSE ON)
 set(POINT_TYPE XYZIRT)
 ```
-- IP设置：
 
-先确认 NetworkManager 是否可用：
-```
+### 配置静态 IP
+
+先确认系统已安装 NetworkManager：
+
+```bash
 command -v nmcli
 ```
-有输出的话，执行下面
-```
+
+若命令有输出，创建并启用雷达网口配置：
+
+```bash
 sudo nmcli connection add \
   type ethernet \
   ifname eth0 \
@@ -110,50 +102,65 @@ sudo nmcli connection add \
   ipv4.never-default yes \
   ipv6.method disabled \
   connection.autoconnect yes
-```
-启用配置：
-```
+
 sudo nmcli connection up lidar-static
 ```
-检查：
-```
+
+检查网口地址和路由：
+
+```bash
 ip -br addr
 ip route
 ```
-正常应类似：
-```
+
+正常输出示例：
+
+```text
 eth0   UP   192.168.1.102/24
 wlan0  UP   192.168.8.238/24
 ```
 
-# PX4 EKF2 关键参数
+## 4. 编译
 
-## px4bridge
- `px4bridge` 只发送**位置和姿态**
+在仓库根目录执行：
+
+```bash
+catkin_make
+```
+
+## 5. 配置 PX4 EKF2 (LIO->PX4)
+
+`px4bridge` 仅发送位置和姿态，建议使用以下参数：
 
 | 参数 | 建议值 | 说明 |
 | --- | ---: | --- |
-| `EKF2_EV_CTRL` | `11` | 融合视觉水平位置、垂直位置和偏航角；不要开启速度融合 |
+| `EKF2_EV_CTRL` | `11` | 融合视觉水平位置、垂直位置和偏航角，不融合速度 |
 | `EKF2_EV_NOISE_MD` | `1` | 使用 PX4 参数中的视觉噪声，不使用消息协方差 |
-| `EKF2_EVP_NOISE` | `0.10` | 视觉位置噪声起始值，单位 m |
-| `EKF2_EVA_NOISE` | `0.05` | 视觉姿态噪声起始值，单位 rad |
-| `EKF2_EV_DELAY` | 实测值 | 视觉数据相对 IMU 的固定延迟，单位 ms |
-| `EKF2_EV_POS_X/Y/Z` | `0` | 输入已是机体位姿时设为 0 |
+| `EKF2_EVP_NOISE` | `0.10` | 视觉位置噪声初始值，单位为 m |
+| `EKF2_EVA_NOISE` | `0.05` | 视觉姿态噪声初始值，单位为 rad |
+| `EKF2_EV_DELAY` | 实测值 | 视觉数据相对 IMU 的固定延迟，单位为 ms |
+| `EKF2_EV_POS_X/Y/Z` | `0` | 输入为机体位姿时设为 `0` |
 
-其他按场景选择：
-- 需要 LIO 的 Z 作为高度基准时，将 `EKF2_HGT_REF` 设为 `Vision`。
+按实际场景补充配置：
+
+- 使用 LIO 的 Z 轴作为高度基准时，将 `EKF2_HGT_REF` 设为 `Vision`。
 - 室内完全不使用 GNSS 时，可将 `EKF2_GPS_CTRL` 设为 `0`。
 - 修改 EKF 参数后重启飞控。
 
-## 记录 odom 延迟
+### 标定里程计延迟
 
-在 QGroundControl 中设置：
+先在 QGroundControl 中配置日志：
 
 | 参数 | 设置 |
 | --- | --- |
 | `SDLOG_PROFILE` | 勾选 bit 7：`Computer Vision and Avoidance` |
-| `SDLOG_MODE` | 台架测试时设为 2：`From boot until shutdown` |
+| `SDLOG_MODE` | 台架测试时设为 `2`：`From boot until shutdown` |
 
-标定完成后可将`SDLOG_MODE` 恢复为 `0`，减少日志量。
+安装分析脚本依赖并绘制 ULog 中的视觉与 IMU 偏航角速度：
 
-`EKF2_EV_DELAY` 只能补偿固定延迟, 使用 `src/realflight_modules/px4bridge/scripts/plot_ev_delay.py`来绘制ulg数据包里面的vision角速度和imu角速度来获取ekf delay。
+```bash
+python3 -m pip install pyulog numpy matplotlib
+python3 src/realflight_modules/px4bridge/scripts/plot_ev_delay.py <log.ulg>
+```
+
+根据两条曲线的固定时间差设置 `EKF2_EV_DELAY`。该参数只能补偿固定延迟；标定结束后可将 `SDLOG_MODE` 恢复为 `0`，以减少日志量。

@@ -1,0 +1,4 @@
+[submodule "src/realflight_modules/FAST_LIO"]
+	path = src/realflight_modules/FAST_LIO
+	url = https://github.com/zhan994/FAST_LIO.git
+	branch = dev_nanobot
