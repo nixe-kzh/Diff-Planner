@@ -8,9 +8,9 @@
   <arg name="map_size_y" default="100.0"/>
   <arg name="map_size_z" default="3.0"/>
 
-  <arg name="odometry_topic" default="/ekf/ekf_odom"/>
+  <arg name="odometry_topic" default="/Odometry_high_rate"/>
   <arg name="point_cloud_topic"
-       default="/laserMapping/cloud_registered"/>
+       default="/cloud_registered"/>
   <arg name="goal_topic" default="/move_base_simple/goal"/>
 
   <!-- Point cloud offsets can align a sensor map whose origin is not world. -->
@@ -26,7 +26,7 @@
   <arg name="planning_horizon" default="7.5"/>
   <arg name="use_multi_topology_trajectories" default="false"/>
 
-  <arg name="enable_rviz" default="true"/>
+  <arg name="enable_rviz" default="false"/>
   <!-- Opt in only after MAVROS, odometry, RC, and failsafes are verified. -->
   <arg name="start_px4ctrl" default="false"/>
   <arg name="rviz_config"

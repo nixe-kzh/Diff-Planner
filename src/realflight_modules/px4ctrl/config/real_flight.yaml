@@ -25,7 +25,7 @@ auto_takeoff_land:
   takeoff_land_speed: 0.2 # m/s
   rc_trigger:
     enabled: true     # 启用遥控器起降功能
-    channel: 10       # 使用 RC 第 10 通道
+    channel: 7       # 使用 RC 第 10 通道
     threshold: 1750   # 通道值从低于 1750 变为高于 1750 时触发一次
 
 thrust_model: # The model that maps thrust signal u(0~1) to real thrust force F(Unit:N): F=k1*Voltage^k2*(k3*u^2+(1-k3)*u).
