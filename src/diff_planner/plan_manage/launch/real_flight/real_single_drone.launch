@@ -10,7 +10,7 @@
 
   <arg name="odometry_topic" default="/Odometry_high_rate"/>
   <arg name="point_cloud_topic"
-       default="/cloud_registered"/>
+       default="/cloud_registered_flu"/>
   <arg name="goal_topic" default="/move_base_simple/goal"/>
 
   <!-- Point cloud offsets can align a sensor map whose origin is not world. -->

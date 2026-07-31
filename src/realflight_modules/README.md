@@ -31,7 +31,7 @@ mavros:
 ```
 sudo apt update
 sudo apt install ros-noetic-mavros ros-noetic-mavros-extras 
-
+sudo /opt/ros/noetic/lib/mavros/install_geographiclib_datasets.sh
 ```
 
 # LIO
