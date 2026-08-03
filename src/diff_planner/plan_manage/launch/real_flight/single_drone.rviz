@@ -1,0 +1,103 @@
+Panels:
+  - Class: rviz/Displays
+    Name: Displays
+  - Class: rviz/Tool Properties
+    Name: Tool Properties
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Alpha: 0.5
+      Cell Size: 1
+      Class: rviz/Grid
+      Color: 160; 160; 164
+      Enabled: true
+      Name: Ground Grid
+      Plane: XY
+      Reference Frame: <Fixed Frame>
+    - Alpha: 1
+      Autocompute Intensity Bounds: true
+      Class: rviz/PointCloud2
+      Color Transformer: AxisColor
+      Enabled: true
+      Name: LIO Point Cloud
+      Queue Size: 5
+      Selectable: true
+      Size (Pixels): 2
+      Style: Points
+      Topic: /laserMapping/cloud_registered
+      Use Fixed Frame: true
+    - Alpha: 1
+      Autocompute Intensity Bounds: true
+      Class: rviz/PointCloud2
+      Color: 255; 170; 0
+      Color Transformer: FlatColor
+      Enabled: true
+      Name: Occupancy
+      Queue Size: 2
+      Size (Pixels): 3
+      Style: Points
+      Topic: /diff_planner_node/grid_map/occupancy
+      Use Fixed Frame: true
+    - Alpha: 0.35
+      Autocompute Intensity Bounds: true
+      Class: rviz/PointCloud2
+      Color: 255; 0; 0
+      Color Transformer: FlatColor
+      Enabled: true
+      Name: Inflated Occupancy
+      Queue Size: 2
+      Size (Pixels): 3
+      Style: Points
+      Topic: /diff_planner_node/grid_map/occupancy_inflate
+      Use Fixed Frame: true
+    - Angle Tolerance: 0.1
+      Class: rviz/Odometry
+      Enabled: true
+      Keep: 100
+      Name: LIO Odometry
+      Position Tolerance: 0.1
+      Topic: /ekf/ekf_odom
+    - Class: rviz/Marker
+      Enabled: true
+      Marker Topic: /diff_planner_node/goal_point
+      Name: Goal
+      Queue Size: 10
+    - Class: rviz/Marker
+      Enabled: true
+      Marker Topic: /diff_planner_node/global_list
+      Name: Global Trajectory
+      Queue Size: 10
+    - Class: rviz/Marker
+      Enabled: true
+      Marker Topic: /diff_planner_node/optimal_list
+      Name: Optimal Trajectory
+      Queue Size: 10
+  Enabled: true
+  Global Options:
+    Background Color: 48; 48; 48
+    Fixed Frame: world
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz/Interact
+    - Class: rviz/MoveCamera
+    - Class: rviz/Select
+    - Class: rviz/SetInitialPose
+      Topic: /initialpose
+    - Class: rviz/SetGoal
+      Topic: /move_base_simple/goal
+  Views:
+    Current:
+      Class: rviz/Orbit
+      Distance: 12
+      Focal Point:
+        X: 0
+        Y: 0
+        Z: 1
+      Name: Current View
+      Pitch: 0.5
+      Target Frame: <Fixed Frame>
+      Yaw: 0.8
+Window Geometry:
+  Height: 900
+  Width: 1440

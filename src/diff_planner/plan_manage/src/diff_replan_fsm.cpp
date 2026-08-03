@@ -733,7 +733,7 @@ namespace diff_planner
 
   void DiffReplanFSM::WaypointCallback(const geometry_msgs::PoseStampedPtr &message)
   {
-    Eigen::Vector3d end_waypoint(message->pose.position.x, message->pose.position.y, message->pose.position.z);
+    Eigen::Vector3d end_waypoint(message->pose.position.x, message->pose.position.y, 1.0);
     if (planner_manager_->grid_map_->GetInflatedOccupancy(end_waypoint) == -1)
     {
       ROS_WARN("The goal is outside the safe fence, ignore this goal!");

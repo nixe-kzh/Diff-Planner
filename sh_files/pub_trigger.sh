@@ -1,5 +1,5 @@
-#!/bin/zsh
-source devel/setup.zsh;
+#!/bin/bash
+
 rostopic pub -1 /move_base_simple/goal geometry_msgs/PoseStamped "header:
   seq: 0
   stamp:

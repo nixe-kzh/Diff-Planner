@@ -1,6 +1,6 @@
-#!/bin/zsh
-source devel/setup.zsh;
-rostopic pub /traj_start_trigger geometry_msgs/PoseStamped "header:
+#!/bin/bash
+
+rostopic pub -1 /back_trigger geometry_msgs/PoseStamped "header:
   seq: 0
   stamp:
     secs: 0

@@ -1,0 +1,28 @@
+<launch>
+  <!-- LIO 输入必须是 nav_msgs/Odometry，pose 应表示 ENU/FLU 下的机体位姿。 -->
+  <arg name="odom_topic" default="/Odometry" />
+
+  <!--
+    MAVROS 在此话题接收 geometry_msgs/PoseStamped，并向 PX4 发送
+    MAVLink VISION_POSITION_ESTIMATE。
+  -->
+  <arg name="vision_pose_topic" default="/mavros/vision_pose/pose" />
+
+  <!-- 有新 odometry 时的最大发送频率；PX4 官方建议外部视觉使用 30~50 Hz。 -->
+  <arg name="vision_pose_rate_hz" default="50.0" />
+
+  <!-- 输入超时后停止发送，避免 PX4 继续融合陈旧位姿。 -->
+  <arg name="odometry_timeout_sec" default="0.2" />
+
+  <node pkg="px4bridge"
+        type="px4bridge_node"
+        name="px4bridge"
+        output="screen"
+        required="true">
+    <param name="vision_pose_rate_hz" value="$(arg vision_pose_rate_hz)" />
+    <param name="odometry_timeout_sec" value="$(arg odometry_timeout_sec)" />
+
+    <remap from="~odom" to="$(arg odom_topic)" />
+    <remap from="~vision_pose" to="$(arg vision_pose_topic)" />
+  </node>
+</launch>
