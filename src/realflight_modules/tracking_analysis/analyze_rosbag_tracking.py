@@ -10,25 +10,29 @@ from pathlib import Path
 
 
 # ============================ Configuration ==============================
-BAG_PATH = Path("/home/nx/2026-08-03-06-47-22.bag")
+BAG_PATH = Path("/home/nx/2026-08-04-03-07-22.bag")
 OUTPUT_DIR = BAG_PATH.parent / ("tracking_analysis_" + BAG_PATH.stem)
+
+# True: save figures and open plot windows; False: only save figures.
+VISUAL = False #! 是否可视化图窗
 
 SETPOINT_TOPIC = "/setpoints_cmd"
 ODOMETRY_TOPIC = "/Odometry_high_rate"
 ATTITUDE_SETPOINT_TOPIC = "/mavros/setpoint_raw/attitude"
 ATTITUDE_FEEDBACK_TOPIC = "/mavros/imu/data"
 
+
+
 USE_HEADER_TIMESTAMP = True
 PLOT_ONLY_SETPOINT_INTERVAL = True
 PLOT_PADDING_S = 0.50
-SHOW_PLOTS = False
+
 FIGURE_DPI = 170
 ANGLE_UNIT = "deg"  # "deg" or "rad"
 
 # Allow the script to run directly from a plain terminal on this machine.
 ROS_PYTHON_PATHS = (
     "/opt/ros/noetic/lib/python3/dist-packages",
-    "/home/nx/nanobot_ws/devel/lib/python3/dist-packages",
 )
 # ========================================================================
 
@@ -47,11 +51,12 @@ except ImportError as exc:
 
 import numpy as np
 
-if not SHOW_PLOTS:
+if not VISUAL:
     import matplotlib
 
     matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D  # noqa: F401; registers "3d" projection
 
 
 def message_time(msg, bag_time):
@@ -439,6 +444,66 @@ def plot_attitude_tracking(data, limits):
     save_figure(figure, "03_attitude_tracking.png")
 
 
+def set_axes_equal_3d(axis, points):
+    """Use equal scaling on all axes so the 3D trajectory is not distorted."""
+    finite_points = points[np.all(np.isfinite(points), axis=1)]
+    if len(finite_points) == 0:
+        return
+
+    minimum = np.min(finite_points, axis=0)
+    maximum = np.max(finite_points, axis=0)
+    center = 0.5 * (minimum + maximum)
+    radius = 0.5 * float(np.max(maximum - minimum))
+    if radius < 1.0e-9:
+        radius = 0.5
+
+    axis.set_xlim(center[0] - radius, center[0] + radius)
+    axis.set_ylim(center[1] - radius, center[1] + radius)
+    axis.set_zlim(center[2] - radius, center[2] + radius)
+
+
+def plot_3d_position_tracking(data, limits):
+    """Plot the desired and measured XYZ trajectories in one 3D figure."""
+    reference = data["setpoint"]
+    feedback = data["odometry"]
+    reference_mask = in_window(reference["time"], limits)
+    feedback_mask = in_window(feedback["time"], limits)
+    reference_position = reference["position"][reference_mask]
+    feedback_position = feedback["position"][feedback_mask]
+
+    figure = plt.figure(figsize=(10, 8), constrained_layout=True)
+    axis = figure.add_subplot(111, projection="3d")
+    axis.plot(
+        feedback_position[:, 0],
+        feedback_position[:, 1],
+        feedback_position[:, 2],
+        color="tab:blue",
+        linewidth=1.35,
+        label="measured",
+    )
+    axis.plot(
+        reference_position[:, 0],
+        reference_position[:, 1],
+        reference_position[:, 2],
+        color="tab:orange",
+        linestyle="--",
+        linewidth=1.65,
+        label="setpoint",
+    )
+
+    axis.set_title("3D position tracking", fontsize=14)
+    axis.set_xlabel("x [m]")
+    axis.set_ylabel("y [m]")
+    axis.set_zlabel("z [m]")
+    axis.grid(True, alpha=0.28, linewidth=0.8)
+    axis.legend(loc="best")
+    set_axes_equal_3d(
+        axis,
+        np.vstack((reference_position, feedback_position)),
+    )
+    save_figure(figure, "04_position_tracking_3d.png")
+
+
 def toml_string(value):
     return '"{}"'.format(str(value).replace("\\", "\\\\").replace('"', '\\"'))
 
@@ -582,9 +647,10 @@ def main():
         "Velocity tracking",
     )
     plot_attitude_tracking(data, limits)
+    plot_3d_position_tracking(data, limits)
     write_metrics_toml(data, limits)
 
-    if SHOW_PLOTS:
+    if VISUAL:
         plt.show()
     else:
         plt.close("all")
