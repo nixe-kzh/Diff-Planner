@@ -1,6 +1,6 @@
 <launch>
   <!-- Keep these defaults aligned with diff_planner/launch/gazebo_sim. -->
-  <arg name="odom_topic" default="/mavros/local_position/odom" />
+  <arg name="odom_topic" default="/Odometry_high_rate" />
   <arg name="cmd_topic" default="/setpoints_cmd" />
 
   <node pkg="px4ctrl" type="px4ctrl_node" name="px4ctrl" output="screen">
