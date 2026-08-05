@@ -336,7 +336,7 @@ void GridMap::ProcessRaycast()
   if (mapping_data_.projected_point_count == 0)
     return;
 
-  ros::Time t1, t2, t3;
+  ros::WallTime t1, t2, t3;
 
   mapping_data_.raycast_num += 1;
 
@@ -357,7 +357,7 @@ void GridMap::ProcessRaycast()
   Eigen::Vector3d ray_pt, pt_w;
 
   int pts_num = 0;
-  t1 = ros::Time::now();
+  t1 = ros::WallTime::now();
   for (int i = 0; i < mapping_data_.projected_point_count; ++i)
   {
     pt_w = mapping_data_.projected_points[i];
@@ -439,7 +439,7 @@ void GridMap::ProcessRaycast()
     }
   }
 
-  t2 = ros::Time::now();
+  t2 = ros::WallTime::now();
 
   min_x = min(min_x, mapping_data_.camera_pos(0));
   min_y = min(min_y, mapping_data_.camera_pos(1));
@@ -503,7 +503,7 @@ void GridMap::ProcessRaycast()
                  mapping_parameters_.clamp_max_log);
   }
 
-  t3 = ros::Time::now();
+  t3 = ros::WallTime::now();
 
   if ( mapping_parameters_.show_occ_time )
   {

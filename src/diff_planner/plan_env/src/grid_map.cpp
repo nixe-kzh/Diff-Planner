@@ -591,12 +591,13 @@ void GridMap::RaycastFromPointCloud()
   if (mapping_data_.projected_point_count == 0)
     return;
   mapping_data_.cache_voxel_count = 0;
-  ros::Time t1, t2, t3;
+  // ros::Time t1, t2, t3;
+  ros::WallTime t1, t2, t3;
   mapping_data_.raycast_num += 1;
   RayCaster raycaster;
   Eigen::Vector3d ray_pt, pt_w;
   int pts_num = 0;
-  t1 = ros::Time::now();
+  t1 = ros::WallTime::now();
   for (int i = 0; i < mapping_data_.projected_point_count; ++i)
   {
     pt_w = mapping_data_.proj_points[i];
@@ -640,7 +641,7 @@ void GridMap::RaycastFromPointCloud()
       }
     }
   }
-  t2 = ros::Time::now();
+  t2 = ros::WallTime::now();
   for (int i = 0; i < mapping_data_.cache_voxel_count; ++i)
   {
     int buf_id = GlobalIndexToBufferIndex(mapping_data_.cache_voxel[i]);
@@ -660,7 +661,7 @@ void GridMap::RaycastFromPointCloud()
         std::min(std::max(mapping_data_.occupancy_buffer[buf_id] + log_update, mapping_parameters_.lidar_clamp_min_log),
                  mapping_parameters_.lidar_clamp_max_log);
   }
-  t3 = ros::Time::now();
+  t3 = ros::WallTime::now();
     if (mapping_parameters_.show_occ_time)
   {
     ROS_WARN("Raycast time: t2-t1=%f, t3-t2=%f, pts_num=%d", (t2 - t1).toSec(), (t3 - t2).toSec(), pts_num);
