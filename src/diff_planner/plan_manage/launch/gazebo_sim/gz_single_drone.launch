@@ -4,7 +4,7 @@
   <arg name="map_size_y" default="100.0"/>
   <arg name="map_size_z" default="3.0"/>
 
-  <arg name="odometry_topic" default="/mavros/local_position/odom"/>
+  <arg name="odometry_topic" default="/Odometry_high_rate"/>
   <arg name="point_cloud_topic" default="/velodyne_points_world"/>
   <arg name="goal_topic" default="/move_base_simple/goal"/>
 
