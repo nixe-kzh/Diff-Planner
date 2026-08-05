@@ -5,6 +5,7 @@ Panels:
     Property Tree Widget:
       Expanded:
         - /Global Options1
+        - /Odometry1/Shape1
       Splitter Ratio: 0.5
     Tree Height: 759
   - Class: rviz/Selection
@@ -109,11 +110,11 @@ Visualization Manager:
       Use Fixed Frame: true
       Use rainbow: true
       Value: false
-    - Alpha: 0.75
+    - Alpha: 1
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
-        Max Value: -0.25
-        Min Value: -1.4500000476837158
+        Max Value: 1.2999999523162842
+        Min Value: -0.5
         Value: true
       Axis: Z
       Channel Name: intensity
@@ -130,12 +131,44 @@ Visualization Manager:
       Queue Size: 2
       Selectable: false
       Size (Pixels): 3
-      Size (m): 0.10000000149011612
-      Style: Flat Squares
+      Size (m): 0.25
+      Style: Squares
       Topic: /diff_planner_node/grid_map/occupancy_inflate
       Unreliable: false
       Use Fixed Frame: true
       Use rainbow: true
+      Value: true
+    - Class: rviz/Marker
+      Enabled: true
+      Marker Topic: /diff_planner_node/goal_point
+      Name: Goal
+      Namespaces:
+        {}
+      Queue Size: 100
+      Value: true
+    - Class: rviz/Marker
+      Enabled: true
+      Marker Topic: /diff_planner_node/global_list
+      Name: Global Path
+      Namespaces:
+        {}
+      Queue Size: 100
+      Value: true
+    - Class: rviz/Marker
+      Enabled: true
+      Marker Topic: /diff_planner_node/optimal_list
+      Name: Local Trajectory
+      Namespaces:
+        {}
+      Queue Size: 100
+      Value: true
+    - Class: rviz/Marker
+      Enabled: true
+      Marker Topic: /diff_planner_node/a_star_list
+      Name: A Star Path
+      Namespaces:
+        {}
+      Queue Size: 100
       Value: true
     - Angle Tolerance: 0.10000000149011612
       Class: rviz/Odometry
@@ -154,55 +187,23 @@ Visualization Manager:
           Scale: 1
           Value: true
         Value: true
-      Enabled: false
+      Enabled: true
       Keep: 100
-      Name: MAVROS Odometry
+      Name: Odometry
       Position Tolerance: 0.10000000149011612
       Queue Size: 10
       Shape:
         Alpha: 1
-        Axes Length: 1
+        Axes Length: 0.30000001192092896
         Axes Radius: 0.10000000149011612
         Color: 255; 25; 0
         Head Length: 0.30000001192092896
         Head Radius: 0.10000000149011612
         Shaft Length: 1
         Shaft Radius: 0.05000000074505806
-        Value: Arrow
-      Topic: /mavros/local_position/odom
+        Value: Axes
+      Topic: /Odometry_high_rate
       Unreliable: false
-      Value: false
-    - Class: rviz/Marker
-      Enabled: true
-      Marker Topic: /diff_planner_node/goal_point
-      Name: Goal
-      Namespaces:
-        {}
-      Queue Size: 100
-      Value: true
-    - Class: rviz/Marker
-      Enabled: true
-      Marker Topic: /diff_planner_node/global_list
-      Name: Global Path
-      Namespaces:
-        "": true
-      Queue Size: 100
-      Value: true
-    - Class: rviz/Marker
-      Enabled: true
-      Marker Topic: /diff_planner_node/optimal_list
-      Name: Local Trajectory
-      Namespaces:
-        "": true
-      Queue Size: 100
-      Value: true
-    - Class: rviz/Marker
-      Enabled: true
-      Marker Topic: /diff_planner_node/a_star_list
-      Name: A Star Path
-      Namespaces:
-        {}
-      Queue Size: 100
       Value: true
   Enabled: true
   Global Options:
@@ -229,7 +230,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 22.622684478759766
+      Distance: 14.238580703735352
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -237,31 +238,31 @@ Visualization Manager:
         Value: false
       Field of View: 0.7853981852531433
       Focal Point:
-        X: 5.796688079833984
-        Y: -0.656877875328064
-        Z: 0.22952193021774292
+        X: 2.864811420440674
+        Y: 0.2797224223613739
+        Z: -0.5828141570091248
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.644997775554657
+      Pitch: 1.5247951745986938
       Target Frame: <Fixed Frame>
-      Yaw: 1.6050000190734863
+      Yaw: 3.145003318786621
     Saved: ~
 Window Geometry:
   Displays:
-    collapsed: false
+    collapsed: true
   Height: 1205
-  Hide Left Dock: false
+  Hide Left Dock: true
   Hide Right Dock: false
-  QMainWindow State: 000000ff00000000fd0000000100000000000001c40000045ffc0200000003fb000000100044006900730070006c006100790073010000003b00000332000000c700fffffffc00000373000000bb000000bb0100001afa000000000100000002fb0000000a005600690065007700730100000000ffffffff0000010000fffffffb0000001200530065006c0065006300740069006f006e0100000000000001c40000006c00fffffffb0000001e0054006f006f006c002000500072006f00700065007200740069006500730100000434000000660000005c00ffffff000005460000045f00000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
+  QMainWindow State: 000000ff00000000fd0000000100000000000001c40000045ffc0200000003fb000000100044006900730070006c006100790073000000003b00000332000000c700fffffffc00000373000000bb0000000000fffffffaffffffff0100000002fb0000000a005600690065007700730000000000ffffffff0000010000fffffffb0000001200530065006c0065006300740069006f006e0000000000000001c40000006c00fffffffb0000001e0054006f006f006c002000500072006f00700065007200740069006500730000000434000000660000005c00ffffff000007100000045f00000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
   Selection:
-    collapsed: false
+    collapsed: true
   Tool Properties:
-    collapsed: false
+    collapsed: true
   Views:
-    collapsed: false
+    collapsed: true
   Width: 1808
-  X: 251
-  Y: 89
+  X: 187
+  Y: 25
